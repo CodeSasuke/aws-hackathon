@@ -2,17 +2,22 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { BedrockRuntimeClient, InvokeModelCommand } from "@aws-sdk/client-bedrock-runtime";
 
-const awsConfig = {
-  region: process.env.AWS_REGION || "ap-northeast-1",
-  credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "placeholder",
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "placeholder",
-  },
+const credentials = {
+  accessKeyId: process.env.AWS_ACCESS_KEY_ID || "placeholder",
+  secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "placeholder",
 };
 
-// Initialize S3 and Bedrock Runtime clients
-export const s3Client = new S3Client(awsConfig);
-export const bedrockClient = new BedrockRuntimeClient(awsConfig);
+// S3 client — uses AWS_REGION (ap-south-1, where your bucket is)
+export const s3Client = new S3Client({
+  region: process.env.AWS_REGION || "ap-south-1",
+  credentials,
+});
+
+// Bedrock client — always uses us-east-1 (Claude 3.5 Sonnet guaranteed available)
+export const bedrockClient = new BedrockRuntimeClient({
+  region: process.env.AWS_BEDROCK_REGION || "us-east-1",
+  credentials,
+});
 
 /**
  * Generate a presigned S3 upload URL for survey Excel/CSV uploads
