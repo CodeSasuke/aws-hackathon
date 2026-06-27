@@ -1,0 +1,172 @@
+// InsightForge – Enterprise Survey Intelligence Platform
+// Database Schema for Aurora PostgreSQL / Supabase PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum JobStatus {
+  PENDING
+  PARSING
+  CLUSTERING
+  ANALYZING
+  GENERATING_REPORTS
+  COMPLETED
+  FAILED
+}
+
+enum Sentiment {
+  POSITIVE
+  NEUTRAL
+  NEGATIVE
+}
+
+model Organization {
+  id        String    @id @default(cuid())
+  name      String
+  users     User[]
+  projects  Project[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model User {
+  id             String        @id @default(cuid())
+  email          String        @unique
+  name           String
+  passwordHash   String
+  role           Role          @default(ANALYST)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id])
+  projects       Project[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Project {
+  id             String         @id @default(cuid())
+  name           String
+  description    String?
+  status         JobStatus      @default(PENDING)
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String
+  createdBy      User           @relation(fields: [createdById], references: [id])
+  surveyFiles    SurveyFile[]
+  responses      Response[]
+  themes         Theme[]
+  reports        Report[]
+  auditLogs      AuditLog[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+model SurveyFile {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  s3Key          String
+  filename       String
+  fileSize       Int
+  totalRowCount  Int
+  
+  // Quality Metrics
+  spamCount      Int       @default(0)
+  duplicateCount Int       @default(0)
+  oneWordCount   Int       @default(0)
+  qualityScore   Int       @default(100)
+  
+  columnMappings Json
+  createdAt      DateTime  @default(now())
+}
+
+model Response {
+  id              String     @id @default(cuid())
+  projectId       String
+  project         Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rowIndex        Int
+  rawData         Json
+  responseHash    String
+  
+  // AI-Enriched Fields
+  sentiment       Sentiment?
+  themeId         String?
+  theme           Theme?     @relation(fields: [themeId], references: [id], onDelete: SetNull)
+  category        String?
+  intent          String?
+  urgency         Int?
+  productArea     String?
+  suggestedAction String?
+  confidenceScore Float?
+  isSpam          Boolean    @default(false)
+  isDuplicate     Boolean    @default(false)
+  representativeQuote String?
+  clusterId       String?
+  
+  createdAt       DateTime   @default(now())
+
+  @@index([projectId])
+  @@index([themeId])
+  @@index([responseHash])
+}
+
+model ResponseCache {
+  hash            String    @id
+  text            String
+  sentiment       Sentiment
+  category        String?
+  themeName       String?
+  intent          String?
+  urgency         Int?
+  productArea     String?
+  suggestedAction String?
+  createdAt       DateTime  @default(now())
+}
+
+model Theme {
+  id        String     @id @default(cuid())
+  projectId String
+  project   Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  category  String?
+  count     Int        @default(0)
+  responses Response[]
+  createdAt DateTime   @default(now())
+
+  @@unique([projectId, name])
+}
+
+model Report {
+  id               String   @id @default(cuid())
+  projectId        String
+  project          Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  executiveSummary String
+  keyFindings      Json
+  recommendations  Json
+  timelineInsights Json?
+  pdfS3Key         String?
+  excelS3Key       String?
+  createdAt        DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  action    String
+  metadata  Json?
+  timestamp DateTime @default(now())
+}
