@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp 
+  xmlns="http://schemas.microsoft.com/office/appshere/manifest/1.1" 
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+  xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0" 
+  xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides" 
+  xsi:type="TaskPaneApp">
+  
+  <Id>b73d81b4-e407-42cf-8d1a-5527a26ef941</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>SurveyIQ</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="SurveyIQ Analytics" />
+  <Description DefaultValue="Enterprise Survey Intelligence inside Microsoft Excel. Automatically categorize, sentiment-tag, and extract themes from feedback rows." />
+  <IconUrl DefaultValue="http://localhost:3000/favicon.ico" />
+  <SupportUrl DefaultValue="http://localhost:3000/support" />
+  
+  <Hosts>
+    <Host Name="Workbook" />
+  </Hosts>
+  
+  <DefaultSettings>
+    <SourceLocation DefaultValue="http://localhost:3000/excel" />
+  </DefaultSettings>
+  
+  <Permissions>ReadWriteDocument</Permissions>
+  
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Workbook">
+        <DesktopFormFactor>
+          <GetStarted>
+            <Title DefaultValue="SurveyIQ Survey Intelligence" />
+            <Description DefaultValue="Select a column of customer feedback comments and click 'Analyze Selection' to enrich your sheet." />
+            <LearnMoreUrl DefaultValue="http://localhost:3000/help" />
+          </GetStarted>
+          
+          <FunctionFile Resid="Commands.Url" />
+          
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <CustomTab id="SurveyIQTab">
+              <Label DefaultValue="SurveyIQ" />
+              <Group id="SurveyIQGroup">
+                <Label DefaultValue="Analytics" />
+                <Control xsi:type="Button" id="TaskpaneButton">
+                  <Label DefaultValue="Analyze Sheet" />
+                  <SuperTip>
+                    <Title DefaultValue="SurveyIQ Taskpane" />
+                    <Description DefaultValue="Open the SurveyIQ side panel to categorize text and extract themes." />
+                  </SuperTip>
+                  <Icon>
+                    <bt:Image size="16" windowResid="Icon.16" />
+                    <bt:Image size="32" windowResid="Icon.32" />
+                    <bt:Image size="80" windowResid="Icon.80" />
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>SurveyIQTaskpane</TaskpaneId>
+                    <SourceLocation Resid="Taskpane.Url" />
+                  </Action>
+                </Control>
+              </Group>
+            </CustomTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+    
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16" DefaultValue="http://localhost:3000/favicon.ico" />
+        <bt:Image id="Icon.32" DefaultValue="http://localhost:3000/favicon.ico" />
+        <bt:Image id="Icon.80" DefaultValue="http://localhost:3000/favicon.ico" />
+      </bt:Images>
+      <bt:Urls>
+        <bt:Url id="Commands.Url" DefaultValue="http://localhost:3000/excel/commands" />
+        <bt:Url id="Taskpane.Url" DefaultValue="http://localhost:3000/excel" />
+      </bt:Urls>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
