@@ -1,18 +1,63 @@
 # SurveyIQ — AWS and Vercel Deployment Guide
 
-This guide details how to configure your AWS infrastructure (S3 bucket, IAM user, and Bedrock model access) and link the Next.js 15 application to Vercel.
+This guide details how to configure your AWS infrastructure (RDS/Aurora PostgreSQL database, S3 bucket, IAM user, and Bedrock model access) and link the Next.js 15 application to Vercel.
 
 ---
 
-## 1. AWS S3 Bucket Configuration
+## 1. AWS RDS / Aurora PostgreSQL Database Setup
+
+To keep the application 100% AWS-native, you must host your PostgreSQL database on **Amazon RDS** or **Amazon Aurora**.
+
+### Steps:
+1. Open the **AWS Console** and search for **RDS**.
+2. Click **Create database**.
+3. Under **Database creation method**, choose **Standard create**.
+4. Under **Engine options**, select **PostgreSQL**.
+5. Under **Templates**, select **Dev/Test** (or **Free Tier** to keep costs zero).
+6. Under **Settings**:
+   * **DB instance identifier:** `surveyiq-db`
+   * **Master username:** `postgres`
+   * **Master password:** Choose a secure password (e.g. `your-secure-password`).
+7. Under **Connectivity**:
+   * **Public access:** Select **Yes** (This is required so you can run migrations from your local terminal, and so Vercel can connect to the database securely).
+   * **VPC security group:** Choose **Create new** (Name it `surveyiq-db-sg`).
+8. Under **Database authentication**, choose **Password authentication**.
+9. Expand **Additional configuration** at the bottom, and enter **Initial database name**: `surveyiq`.
+10. Click **Create database** (it will take 3-5 minutes to provision).
+
+### Configure Security Group:
+1. Once the database status is **Available**, click on `surveyiq-db`.
+2. Under **Connectivity & security**, click the link under **VPC security groups** (`surveyiq-db-sg`).
+3. Select the security group, go to the **Inbound rules** tab, and click **Edit inbound rules**.
+4. Add a rule:
+   * **Type:** `PostgreSQL` (Port `5432`)
+   * **Source:** `Anywhere-IPv4` (`0.0.0.0/0`)
+   * *(Note: This allows your local machine and Vercel's serverless functions to connect).*
+5. Click **Save rules**.
+
+### Update Connection Strings:
+1. Copy the **Endpoint** from the RDS database details.
+2. In your `.env` file (and Vercel environment variables), update the connection strings:
+   ```env
+   DATABASE_URL="postgresql://postgres:your-secure-password@YOUR_RDS_ENDPOINT_HERE:5432/surveyiq?sslmode=require"
+   DIRECT_URL="postgresql://postgres:your-secure-password@YOUR_RDS_ENDPOINT_HERE:5432/surveyiq?sslmode=require"
+   ```
+3. Push your database schema to AWS:
+   ```bash
+   npx prisma db push
+   ```
+
+---
+
+## 2. AWS S3 Bucket Configuration
 
 To support direct-to-S3 Excel/CSV uploads from your browser, you must create an S3 bucket and configure its **CORS (Cross-Origin Resource Sharing)** rules.
 
 ### Steps:
-1. Open the **AWS Console** and navigate to **S3**.
+1. Navigate to **S3** in the AWS Console.
 2. Click **Create bucket**. Name it (e.g., `surveyiq-uploads-yourname`) and choose your region (e.g., `ap-northeast-1`).
 3. Under **Object Ownership**, select **ACLs disabled (recommended)**.
-4. Keep **Block *all* public access** checked (direct uploads use secure presigned URLs; the bucket does not need to be public).
+4. Keep **Block *all* public access** checked.
 5. Click **Create bucket**.
 
 ### CORS Policy:
@@ -45,7 +90,7 @@ To support direct-to-S3 Excel/CSV uploads from your browser, you must create an 
 
 ---
 
-## 2. AWS Bedrock Model Access
+## 3. AWS Bedrock Model Access
 
 AWS Bedrock requires you to manually request model access before your API calls can invoke models.
 
@@ -55,11 +100,11 @@ AWS Bedrock requires you to manually request model access before your API calls 
 3. On the left sidebar, click **Model access** (near the bottom).
 4. Click **Manage model access** in the top right.
 5. Check the box next to **Anthropic -> Claude 3.5 Sonnet**.
-6. Click **Save changes** (access is granted instantly for Claude 3.5 Sonnet).
+6. Click **Save changes** (access is granted instantly).
 
 ---
 
-## 3. AWS IAM User & Permissions
+## 4. AWS IAM User & Permissions
 
 You need an IAM user access key to authenticate the backend API route with Bedrock and S3.
 
@@ -99,7 +144,7 @@ You need an IAM user access key to authenticate the backend API route with Bedro
 
 ---
 
-## 4. Vercel Deployment
+## 5. Vercel Deployment
 
 Deploying the Next.js frontend to Vercel is fully automated.
 
@@ -112,8 +157,8 @@ Deploying the Next.js frontend to Vercel is fully automated.
 3. Click **Add New** -> **Project**.
 4. Import your GitHub repository.
 5. In the **Environment Variables** accordion, add the following variables from your `.env` file:
-   * `DATABASE_URL` (pooled Supabase connection)
-   * `DIRECT_URL` (direct Supabase connection)
+   * `DATABASE_URL` (AWS RDS connection)
+   * `DIRECT_URL` (AWS RDS connection)
    * `NEXTAUTH_SECRET` (generate a random string)
    * `NEXTAUTH_URL` (your production URL, or let Vercel handle it)
    * `AWS_ACCESS_KEY_ID`
