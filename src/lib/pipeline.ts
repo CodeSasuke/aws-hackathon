@@ -1,5 +1,7 @@
 import crypto from "crypto";
-import { Sentiment, JobStatus } from "@prisma/client";
+type Sentiment = "POSITIVE" | "NEGATIVE" | "NEUTRAL";
+type JobStatus = "PENDING" | "PARSING" | "CLUSTERING" | "ANALYZING" | "GENERATING_REPORTS" | "COMPLETED" | "FAILED";
+
 import { prisma } from "./prisma";
 import { invokeClaude35 } from "./aws";
 

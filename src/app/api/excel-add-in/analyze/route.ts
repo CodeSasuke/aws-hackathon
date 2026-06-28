@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
 import { getLocalDeterministicLabel, clusterResponses, analyzeBatchWithBedrock } from "@/lib/pipeline";
-import { Sentiment } from "@prisma/client";
+type Sentiment = "POSITIVE" | "NEGATIVE" | "NEUTRAL";
 
 interface EnrichedResult {
   text: string;
