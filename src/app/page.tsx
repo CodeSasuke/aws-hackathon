@@ -405,10 +405,10 @@ export default function Home() {
             setAnalysisStatus("Clustering similar responses locally...");
           } else if (status === "ANALYZING") {
             setAnalysisProgress(70);
-            setAnalysisStatus("Running AWS Bedrock batch intelligence...");
+            setAnalysisStatus("Running local semantic text classification...");
           } else if (status === "GENERATING_REPORTS") {
             setAnalysisProgress(90);
-            setAnalysisStatus("Generating McKinsey executive reports...");
+            setAnalysisStatus("Generating strategic executive reports...");
           } else if (status === "COMPLETED") {
             setAnalysisProgress(100);
             setAnalysisStatus("Analysis Completed!");
@@ -771,10 +771,10 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">AWS Bedrock Optimization</p>
-                  <p className="text-2xl font-bold mt-1 text-emerald-600">95.4%</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Analysis Cache Efficiency</p>
+                  <p className="text-2xl font-bold mt-1 text-emerald-600">100%</p>
                   <p className="text-[10px] text-gray-500 mt-2">
-                    LLM Cost saved via clustering cache
+                    Processed locally & cached in RDS database
                   </p>
                 </div>
               </div>
@@ -1074,7 +1074,7 @@ export default function Home() {
               <div className="flex items-start justify-between border-b border-gray-200 pb-6">
                 <div>
                   <h2 className="text-xl font-bold text-gray-900">{projectData?.name || "Customer Feedback Report"}</h2>
-                  <p className="text-sm text-gray-500 mt-1">McKinsey-Style Strategic Board Presentation Summary</p>
+                  <p className="text-sm text-gray-500 mt-1">Strategic Board Presentation Summary</p>
                 </div>
                 <div className="flex items-center space-x-3">
                   <button
