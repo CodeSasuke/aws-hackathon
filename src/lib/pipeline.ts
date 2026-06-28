@@ -409,9 +409,21 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
 
     console.log(`Processing ${responseTexts.length} responses for project ${projectId}...`);
 
+    // Pre-calculate hashes and fetch all caches in a single query to avoid sequential SELECT statements
+    const hashes = responses.map(r => {
+      const rawData = r.rawData as Record<string, any>;
+      const textValue = (rawData[textFieldName] || "").toString();
+      return crypto.createHash("sha256").update(textValue.toLowerCase()).digest("hex");
+    });
+
+    const existingCaches = await prisma.responseCache.findMany({
+      where: { hash: { in: hashes } }
+    });
+    const cacheMap = new Map(existingCaches.map(c => [c.hash, c]));
+
     // Step 1: Rule-based preprocessing and deduplication local hashing
     const pendingAnalysis: { id: string; text: string }[] = [];
-    const processedResults: Record<string, EnrichedOutput> = {};
+    const processedResults: Record<string, EnrichedOutput & { hash?: string }> = {};
 
     await prisma.project.update({
       where: { id: projectId },
@@ -419,13 +431,11 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     });
     await updateJobProgress(40, "CLUSTERING");
 
-    for (const r of responses) {
+    for (let idx = 0; idx < responses.length; idx++) {
+      const r = responses[idx];
       const rawData = r.rawData as Record<string, any>;
       const isQuality = evaluateRowQuality(rawData, mappings.textCols);
-      
-      // Hash is calculated from the primary open-ended column
-      const textValue = (rawData[textFieldName] || "").toString();
-      const hash = crypto.createHash("sha256").update(textValue.toLowerCase()).digest("hex");
+      const hash = hashes[idx];
 
       if (!isQuality) {
         processedResults[r.id] = {
@@ -438,13 +448,9 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
           suggestedAction: "None required",
           confidenceScore: 1.0,
           isSpam: true,
-          representativeQuote: "Low Quality Input"
+          representativeQuote: "Low Quality Input",
+          hash
         };
-
-        await prisma.response.update({
-          where: { id: r.id },
-          data: { responseHash: hash, isSpam: true }
-        });
         continue;
       }
 
@@ -454,13 +460,12 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
       // Check local rules
       const localLabel = getLocalDeterministicLabel(item.text);
       if (localLabel) {
-        processedResults[item.id] = localLabel;
+        processedResults[item.id] = { ...localLabel, hash };
         continue;
       }
 
-      // Check DB Cache for identical responses
-      const cached = await prisma.responseCache.findUnique({ where: { hash } });
-      
+      // Check DB Cache map
+      const cached = cacheMap.get(hash);
       if (cached) {
         processedResults[item.id] = {
           sentiment: cached.sentiment,
@@ -472,32 +477,37 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
           suggestedAction: cached.suggestedAction || "None required",
           confidenceScore: 1.0,
           isSpam: false,
-          representativeQuote: cached.text
+          representativeQuote: cached.text,
+          isDuplicate: true,
+          hash
         };
-        
-        // Update Response table directly to mark as duplicate
-        await prisma.response.update({
-          where: { id: item.id },
-          data: { responseHash: hash, isDuplicate: true }
-        });
         continue;
       }
 
       // Otherwise, queue for clustering
       pendingAnalysis.push(item);
-      await prisma.response.update({
-        where: { id: item.id },
-        data: { responseHash: hash }
-      });
+      processedResults[item.id] = {
+        sentiment: "NEUTRAL",
+        category: "General",
+        theme: "General Feedback",
+        intent: "Feedback",
+        urgency: 1,
+        productArea: "General",
+        suggestedAction: "Review qualitative feedback details for product improvements.",
+        confidenceScore: 0.75,
+        isSpam: false,
+        representativeQuote: item.text,
+        hash
+      };
     }
 
-    console.log(`Locally resolved ${Object.keys(processedResults).length} responses. ${pendingAnalysis.length} unique items remaining for clustering.`);
+    console.log(`Locally resolved ${Object.keys(processedResults).length - pendingAnalysis.length} responses. ${pendingAnalysis.length} unique items remaining for clustering.`);
 
     // Step 2: Clustering Jaccard Similarity
     const clusters = clusterResponses(pendingAnalysis, 0.55);
     console.log(`Clustered remaining responses into ${clusters.size} groups.`);
 
-    // Prepare representative responses for Bedrock
+    // Prepare representative responses
     const representatives: { id: string; text: string }[] = [];
     for (const repId of clusters.keys()) {
       const textObj = pendingAnalysis.find(x => x.id === repId);
@@ -506,18 +516,17 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
       }
     }
 
-    // Step 3: Bedrock batch calls (in chunks of 25 to avoid token limits)
+    // Step 3: Local matching engine chunks processing
     await prisma.project.update({
       where: { id: projectId },
       data: { status: "ANALYZING" }
     });
     await updateJobProgress(70, "ANALYZING");
 
+    const cacheCreates: any[] = [];
     const chunkSize = 25;
     for (let i = 0; i < representatives.length; i += chunkSize) {
       const chunk = representatives.slice(i, i + chunkSize);
-      console.log(`Sending Bedrock batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(representatives.length / chunkSize)}...`);
-      
       const batchResults = await analyzeBatchLocal(chunk, project);
       
       // Propagate labels to all members in the cluster
@@ -525,7 +534,10 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
         const repResult = batchResults[rep.id];
         if (repResult) {
           // Apply to representative
-          processedResults[rep.id] = repResult;
+          processedResults[rep.id] = {
+            ...repResult,
+            hash: processedResults[rep.id]?.hash
+          };
           
           // Propagate to other members in cluster
           const clusterMembers = clusters.get(rep.id) || [];
@@ -533,30 +545,35 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
             if (memberId !== rep.id) {
               processedResults[memberId] = {
                 ...repResult,
-                isDuplicate: true // Flag as duplicate since it got its label from cluster propagation
+                isDuplicate: true,
+                hash: processedResults[memberId]?.hash
               };
             }
           }
 
-          // Cache the representative result globally in Database
+          // Queue cache creation locally
           const hash = crypto.createHash("sha256").update(rep.text.toLowerCase()).digest("hex");
-          await prisma.responseCache.upsert({
-            where: { hash },
-            update: {},
-            create: {
-              hash,
-              text: rep.text,
-              sentiment: repResult.sentiment,
-              category: repResult.category,
-              themeName: repResult.theme,
-              intent: repResult.intent,
-              urgency: repResult.urgency,
-              productArea: repResult.productArea,
-              suggestedAction: repResult.suggestedAction
-            }
+          cacheCreates.push({
+            hash,
+            text: rep.text,
+            sentiment: repResult.sentiment,
+            category: repResult.category,
+            themeName: repResult.theme,
+            intent: repResult.intent,
+            urgency: repResult.urgency,
+            productArea: repResult.productArea,
+            suggestedAction: repResult.suggestedAction
           });
         }
       }
+    }
+
+    // Write all new response caches in bulk to avoid multiple individual inserts
+    if (cacheCreates.length > 0) {
+      await prisma.responseCache.createMany({
+        data: cacheCreates,
+        skipDuplicates: true
+      });
     }
 
     // Step 4: Write all results to the Database & create Themes
@@ -592,12 +609,12 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
       themeDbMap.set(themeName, dbTheme.id);
     }
 
-    // Update Responses in Database
+    // Prepare dynamic counts and bulk parallel update execution
     let spamCount = 0;
     let duplicateCount = 0;
     let oneWordCount = 0;
 
-    for (const r of responses) {
+    const updatesToRun = responses.map((r) => {
       const result = processedResults[r.id];
       if (result) {
         const themeId = themeDbMap.get(result.theme) || null;
@@ -610,8 +627,8 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
         if (isDuplicate) duplicateCount++;
         if (isOneWord) oneWordCount++;
 
-        await prisma.response.update({
-          where: { id: r.id },
+        return {
+          id: r.id,
           data: {
             sentiment: result.sentiment,
             themeId,
@@ -623,27 +640,49 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
             confidenceScore: result.confidenceScore,
             isSpam,
             isDuplicate,
-            representativeQuote: result.representativeQuote
+            representativeQuote: result.representativeQuote,
+            responseHash: result.hash
           }
-        });
+        };
+      }
+      return null;
+    }).filter(Boolean);
 
-        // Update theme counter
-        if (themeId && !isSpam) {
-          await prisma.theme.update({
-            where: { id: themeId },
-            data: { count: { increment: 1 } }
-          });
-        }
+    // Run response updates in parallel chunks of 40 to avoid hitting limits
+    const updateBatchSize = 40;
+    for (let i = 0; i < updatesToRun.length; i += updateBatchSize) {
+      const chunk = updatesToRun.slice(i, i + updateBatchSize);
+      await Promise.all(
+        chunk.map(up => 
+          prisma.response.update({
+            where: { id: up!.id },
+            data: up!.data
+          })
+        )
+      );
+    }
+
+    // Update theme counts based on the updated responses
+    for (const [themeName, themeId] of themeDbMap.entries()) {
+      const count = Object.values(processedResults).filter(
+        res => res.theme === themeName && !res.isSpam
+      ).length;
+
+      if (count > 0) {
+        await prisma.theme.update({
+          where: { id: themeId },
+          data: { count }
+        });
       }
     }
 
     // Update file metrics
-    const qualityScore = Math.max(
+    const qualityScore = responseTexts.length > 0 ? Math.max(
       0,
       Math.round(
         ((responseTexts.length - (spamCount + duplicateCount + oneWordCount)) / responseTexts.length) * 100
       )
-    );
+    ) : 100;
 
     await prisma.surveyFile.update({
       where: { id: file.id },
