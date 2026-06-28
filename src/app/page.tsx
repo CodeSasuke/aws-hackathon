@@ -301,18 +301,27 @@ export default function Home() {
       const data = await res.json();
       if (data.project) {
         setProjectData(data.project);
-        setResponses(data.responses.map((r: any) => ({
-          id: r.id,
-          rowIndex: r.rowIndex,
-          text: r.rawData[Object.keys(r.rawData)[0]] || "", // Extract text column value
-          sentiment: r.sentiment || "PENDING",
-          category: r.category || "N/A",
-          theme: r.themeId ? (data.project.themes.find((t: any) => t.id === r.themeId)?.name || "N/A") : "N/A",
-          urgency: r.urgency || 0,
-          action: r.suggestedAction || "N/A",
-          spam: r.isSpam ? "YES" : "NO",
-          duplicate: r.isDuplicate ? "YES" : "NO"
-        })));
+        
+        const file = data.project.surveyFiles?.[0];
+        const mappings = file?.columnMappings as { textCols?: string[] } | undefined;
+        const textColName = mappings?.textCols?.[0] || "";
+
+        setResponses(data.responses.map((r: any) => {
+          const keys = Object.keys(r.rawData || {});
+          const actualTextCol = textColName && keys.includes(textColName) ? textColName : keys[0] || "";
+          return {
+            id: r.id,
+            rowIndex: r.rowIndex,
+            text: r.rawData[actualTextCol] || "",
+            sentiment: r.sentiment || "PENDING",
+            category: r.category || "N/A",
+            theme: r.themeId ? (data.project.themes.find((t: any) => t.id === r.themeId)?.name || "N/A") : "N/A",
+            urgency: r.urgency || 0,
+            action: r.suggestedAction || "N/A",
+            spam: r.isSpam ? "YES" : "NO",
+            duplicate: r.isDuplicate ? "YES" : "NO"
+          };
+        }));
       }
     } catch (err) {
       console.error("Failed to load project details", err);

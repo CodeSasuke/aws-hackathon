@@ -43,7 +43,7 @@ export function getLocalDeterministicLabel(text: string): EnrichedOutput | null 
   }
 
   // Simple general praise checks
-  if (["good", "great", "excellent", "perfect", "nice", "love it", "awesome", "very good", "best"].includes(clean)) {
+  if (["good", "great", "excellent", "perfect", "nice", "love it", "awesome", "very good", "best", "smooth", "tasty", "delicious"].includes(clean)) {
     return {
       sentiment: "POSITIVE",
       category: "General",
@@ -235,9 +235,9 @@ function analyzeTextLocal(
   }
 
   // Fallback default categorization using sentiment cues
-  const generalSentiment = clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome")
+  const generalSentiment = clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome") || clean.includes("smooth") || clean.includes("tasty") || clean.includes("delicious") || clean.includes("perfect") || clean.includes("nice") || clean.includes("impressed")
     ? "POSITIVE" as const 
-    : clean.includes("bad") || clean.includes("poor") || clean.includes("issue") || clean.includes("error") || clean.includes("hate")
+    : clean.includes("bad") || clean.includes("poor") || clean.includes("issue") || clean.includes("error") || clean.includes("hate") || clean.includes("slow") || clean.includes("fail")
       ? "NEGATIVE" as const 
       : "NEUTRAL" as const;
 
