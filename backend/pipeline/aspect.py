@@ -1,23 +1,47 @@
 import os
 import time
 import yaml
+import copy
 from typing import List, Dict, Any
 from .interface import PipelineStage, DocState
 
-_ontology = None
+_ontology_cache = {}
 
-def get_ontology():
-    global _ontology
-    if _ontology is not None:
-        return _ontology
+def merge_dicts(dict1: dict, dict2: dict) -> dict:
+    for k, v in dict2.items():
+        if k == "synonyms" and isinstance(v, list) and k in dict1 and isinstance(dict1[k], list):
+            dict1[k] = list(set(dict1[k] + v))
+        elif isinstance(v, dict) and k in dict1 and isinstance(dict1[k], dict):
+            merge_dicts(dict1[k], v)
+        else:
+            dict1[k] = v
+    return dict1
+
+def get_ontology(project_id: str = None) -> dict:
+    cache_key = project_id or "default"
+    if cache_key in _ontology_cache:
+        return _ontology_cache[cache_key]
         
     backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    ontology_path = os.path.join(backend_dir, "rules", "ontology.yaml")
+    default_path = os.path.join(backend_dir, "config", "default", "ontology.yaml")
     
-    with open(ontology_path, "r") as f:
-        data = yaml.safe_load(f)
-    _ontology = data.get("ontology", {})
-    return _ontology
+    if not os.path.exists(default_path):
+        return {}
+        
+    with open(default_path, "r") as f:
+        default_data = yaml.safe_load(f)
+    ontology = default_data.get("ontology", {})
+    
+    if project_id:
+        proj_path = os.path.join(backend_dir, "config", f"project_{project_id}", "ontology.yaml")
+        if os.path.exists(proj_path):
+            with open(proj_path, "r") as f:
+                proj_data = yaml.safe_load(f)
+            proj_ontology = proj_data.get("ontology", {})
+            ontology = merge_dicts(copy.deepcopy(ontology), proj_ontology)
+            
+    _ontology_cache[cache_key] = ontology
+    return ontology
 
 class AspectStage(PipelineStage):
     @property
@@ -32,7 +56,7 @@ class AspectStage(PipelineStage):
             doc.timings[self.name] = (time.perf_counter() - start_time) * 1000
             return doc
             
-        ontology = get_ontology()
+        ontology = get_ontology(doc.project_id)
         
         # Split document into clauses by conjunctions (e.g. but, and, although) 
         # or punctuations (comma, period)

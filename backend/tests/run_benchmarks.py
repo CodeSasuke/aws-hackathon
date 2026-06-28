@@ -62,7 +62,7 @@ def run_performance_benchmarks():
         latencies = []
         for item in dataset:
             row_start = time.perf_counter()
-            engine.analyze_comment(item["id"], item["text"])
+            engine.analyze_comment(item["id"], item["text"], project_id="beer")
             latencies.append((time.perf_counter() - row_start) * 1000) # milliseconds
             
         elapsed_sec = time.perf_counter() - start_time

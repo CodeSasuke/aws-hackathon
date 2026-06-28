@@ -105,7 +105,7 @@ def process_job(session_factory, job) -> dict:
                 doc_states.append(doc_copy)
             else:
                 # Run complete analysis
-                doc = engine.analyze_comment(resp.id, comment_text)
+                doc = engine.analyze_comment(resp.id, comment_text, project_id=project_id)
                 processed_cache[comment_text] = doc
                 doc_states.append(doc)
                 

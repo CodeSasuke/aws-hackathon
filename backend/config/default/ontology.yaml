@@ -1,0 +1,15 @@
+version: "1.0"
+extends: null
+ontology:
+  Product:
+    synonyms: ["product", "item", "offering", "thing"]
+  Service:
+    synonyms: ["service", "staff", "delivery", "shipping", "order", "help", "agent", "support"]
+  Price:
+    synonyms: ["price", "cost", "pricing", "money", "expensive", "cheap", "valuable", "worth", "charge", "rate"]
+  Availability:
+    synonyms: ["find", "buy", "store", "purchase", "local", "stock", "sold", "available", "get", "location", "retailer"]
+  Quality:
+    synonyms: ["quality", "premium", "craftsmanship", "standard", "grade"]
+  CustomerService:
+    synonyms: ["support", "employee", "representative", "manager", "helpdesk", "contact"]

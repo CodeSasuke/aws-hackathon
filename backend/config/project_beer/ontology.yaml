@@ -1,0 +1,32 @@
+version: "1.0"
+extends: "default"
+ontology:
+  Product:
+    synonyms: ["beer", "drink", "product", "beverage", "liquid", "brew", "it"]
+    Taste:
+      synonyms: ["taste", "flavor", "mouthfeel", "tasty", "delicious", "tasted"]
+      subcategories:
+        Aftertaste:
+          synonyms: ["aftertaste", "finish", "linger", "after taste"]
+        Sweetness:
+          synonyms: ["sweetness", "sweet", "sugary", "saccharine"]
+        Bitterness:
+          synonyms: ["bitter", "bitterness", "hoppy", "sour"]
+        Smoothness:
+          synonyms: ["smooth", "smoothly", "smoothness", "clean"]
+    Packaging:
+      synonyms: ["packaging", "design", "look", "appeal"]
+      subcategories:
+        Bottle:
+          synonyms: ["bottle", "glass", "shape"]
+        Label:
+          synonyms: ["label", "logo", "font", "gold"]
+        Can:
+          synonyms: ["can", "pack", "box"]
+    Nutrition:
+      synonyms: ["nutrition", "ingredient", "organic", "healthy", "heavy"]
+      subcategories:
+        Calorie:
+          synonyms: ["calorie", "calories", "light", "lite"]
+        Carb:
+          synonyms: ["carb", "carbs", "carbohydrate", "carbohydrates"]

@@ -48,7 +48,7 @@ def run_test_suite():
             expected = case["expected"]
             
             # Run pipeline
-            doc = engine.analyze_comment(f"test_{idx}", text)
+            doc = engine.analyze_comment(f"test_{idx}", text, project_id="beer")
             
             passed = True
             failures = []

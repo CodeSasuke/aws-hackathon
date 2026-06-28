@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
 class DocState:
-    def __init__(self, doc_id: str, text: str):
+    def __init__(self, doc_id: str, text: str, project_id: Optional[str] = None):
         self.id: str = doc_id
         self.text: str = text
+        self.project_id: Optional[str] = project_id
         self.clean_text: str = text
         self.language: str = "English"
         

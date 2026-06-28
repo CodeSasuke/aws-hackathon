@@ -44,6 +44,7 @@ def startup_event():
 # Pydantic schemas
 class SingleAnalyzeRequest(BaseModel):
     text: str
+    projectId: Optional[str] = None
 
 class ProjectAnalyzeRequest(BaseModel):
     priority: Optional[int] = 0
@@ -63,7 +64,7 @@ def analyze_single_comment(request: SingleAnalyzeRequest):
     
     try:
         engine = AnalysisEngine()
-        doc = engine.analyze_comment("single_run", request.text)
+        doc = engine.analyze_comment("single_run", request.text, project_id=request.projectId)
         return doc.to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")
