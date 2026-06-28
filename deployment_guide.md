@@ -1,6 +1,6 @@
 # SurveyIQ — AWS and Vercel Deployment Guide
 
-This guide details how to configure your AWS infrastructure using exact resource names, and how to link the Next.js 15 application to Vercel.
+This guide details how to configure your AWS database and storage infrastructure, and how to link the Next.js 15 application to Vercel.
 
 ---
 
@@ -58,7 +58,7 @@ To support direct-to-S3 Excel/CSV uploads from your browser, you must create an 
 2. Click **Create bucket**.
 3. Under **General configuration**:
    * **Bucket name:** `surveyiq-uploads-siddhant`
-   * **AWS Region:** Select your region (e.g. Tokyo `ap-northeast-1`).
+   * **AWS Region:** Select your region (e.g. Mumbai `ap-south-1`).
 4. Under **Object Ownership**, select **ACLs disabled (recommended)**.
 5. Keep **Block *all* public access** checked.
 6. Click **Create bucket**.
@@ -93,28 +93,22 @@ To support direct-to-S3 Excel/CSV uploads from your browser, you must create an 
 
 ---
 
-## 3. AWS Bedrock Model Access
+## 3. AWS IAM User & Permissions
 
-> **Note:** The Bedrock Model Access page has been retired by AWS. Models (including Claude 3.5 Sonnet) are now **automatically enabled** on first invocation in your account. No manual activation is needed. Simply ensure your IAM user has the `bedrock:InvokeModel` permission (covered in Step 4 below) and the model will work immediately.
-
----
-
-## 4. AWS IAM User & Permissions
-
-You need an IAM user access key to authenticate the backend API route with Bedrock and S3.
+You need an IAM user access key to authenticate the backend API route with S3 for presigned upload and download URLs.
 
 ### Steps:
 1. Open the **IAM Console** and click **Users** -> **Create user**.
 2. Name the user `surveyiq-service-user` and click **Next**.
 3. Under **Permissions options**, select **Attach policies directly**.
-4. Click **Create policy**, switch to the **JSON** editor tab, and paste the following policy (it is already pre-configured for your bucket `surveyiq-uploads-siddhant`):
+4. Click **Create policy**, switch to the **JSON** editor tab, and paste the following policy (pre-configured for your S3 bucket `surveyiq-uploads-siddhant`):
 
 ```json
 {
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "VisualEditor0",
+            "Sid": "S3Access",
             "Effect": "Allow",
             "Action": [
                 "s3:PutObject",
@@ -122,23 +116,17 @@ You need an IAM user access key to authenticate the backend API route with Bedro
                 "s3:DeleteObject"
             ],
             "Resource": "arn:aws:s3:::surveyiq-uploads-siddhant/*"
-        },
-        {
-            "Sid": "VisualEditor1",
-            "Effect": "Allow",
-            "Action": "bedrock:InvokeModel",
-            "Resource": "arn:aws:bedrock:*::foundation-model/anthropic.claude-3-5-sonnet-20241022-v2:0"
         }
     ]
 }
 ```
 5. Save the policy as `SurveyIQPolicy`, return to the user creation screen, select it, and click **Next** -> **Create user**.
-6. Open the newly created `surveyiq-service-user` details page, go to the **Security credentials** tab, and click **Create access key** (select "Local code" or "Other").
+6. Open the newly created `surveyiq-service-user` details page, go to the **Security credentials** tab, and click **Create access key** (select "Application running outside AWS" or "Other").
 7. Copy your `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` to your `.env` file.
 
 ---
 
-## 5. Vercel Deployment
+## 4. Vercel Deployment
 
 Deploying the Next.js frontend to Vercel is fully automated.
 
@@ -157,6 +145,6 @@ Deploying the Next.js frontend to Vercel is fully automated.
    * `NEXTAUTH_URL` (your production URL, or let Vercel handle it)
    * `AWS_ACCESS_KEY_ID`
    * `AWS_SECRET_ACCESS_KEY`
-   * `AWS_REGION` (e.g. `ap-northeast-1`)
+   * `AWS_REGION` (e.g. `ap-south-1`)
    * `AWS_S3_BUCKET` (e.g. `surveyiq-uploads-siddhant`)
 6. Click **Deploy**. Vercel will build and launch your application globally!
