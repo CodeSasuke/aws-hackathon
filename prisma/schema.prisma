@@ -70,6 +70,8 @@ model Project {
   reports        Report[]
   auditLogs      AuditLog[]
   analysisJobs   AnalysisJob[]
+  nlpConfig      Json?
+  competitorSuggestions CompetitorSuggestion[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -213,4 +215,19 @@ model AnalysisJob {
 
   @@index([status])
   @@index([projectId, status])
+}
+
+model CompetitorSuggestion {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brandName  String
+  mentions   Int      @default(0)
+  confidence Float    @default(0.0)
+  status     String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([projectId, brandName])
+  @@index([projectId])
 }

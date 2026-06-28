@@ -38,8 +38,8 @@ class AnalysisEngine:
             EnsembleStage()
         ]
 
-    def analyze_comment(self, doc_id: str, text: str, project_id: str = None) -> DocState:
-        doc = DocState(doc_id, text, project_id=project_id)
+    def analyze_comment(self, doc_id: str, text: str, project_id: str = None, nlp_config: dict = None) -> DocState:
+        doc = DocState(doc_id, text, project_id=project_id, nlp_config=nlp_config)
         
         # Sequentially process each stage
         for stage in self.stages:
@@ -52,10 +52,10 @@ class AnalysisEngine:
                 
         return doc
 
-    def analyze_batch(self, items: List[dict], project_id: str = None) -> List[DocState]:
+    def analyze_batch(self, items: List[dict], project_id: str = None, nlp_config: dict = None) -> List[DocState]:
         # Batch analysis helper
         results = []
         for item in items:
-            doc = self.analyze_comment(item["id"], item["text"], project_id=project_id)
+            doc = self.analyze_comment(item["id"], item["text"], project_id=project_id, nlp_config=nlp_config)
             results.append(doc)
         return results

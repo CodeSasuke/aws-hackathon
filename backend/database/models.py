@@ -11,6 +11,7 @@ class Project(Base):
     status = Column(String, default="PENDING")
     organizationId = Column(String, nullable=False)
     createdById = Column(String, nullable=False)
+    nlpConfig = Column(JSON, nullable=True)
     createdAt = Column(DateTime, default=func.now())
     updatedAt = Column(DateTime, default=func.now(), onupdate=func.now())
 
@@ -105,3 +106,15 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     metadata = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=func.now())
+
+class CompetitorSuggestion(Base):
+    __tablename__ = "CompetitorSuggestion"
+    
+    id = Column(String, primary_key=True)
+    projectId = Column(String, ForeignKey("Project.id", ondelete="CASCADE"), nullable=False)
+    brandName = Column(String, nullable=False)
+    mentions = Column(Integer, default=0, nullable=False)
+    confidence = Column(Float, default=0.0, nullable=False)
+    status = Column(String, default="PENDING", nullable=False)
+    createdAt = Column(DateTime, default=func.now())
+    updatedAt = Column(DateTime, default=func.now(), onupdate=func.now())

@@ -78,6 +78,7 @@ def process_job(session_factory, job) -> dict:
             session.commit()
             
         # 3. Process each response through the NLP engine
+        nlp_config = project.nlpConfig if (project and project.nlpConfig) else {}
         engine = AnalysisEngine()
         doc_states = []
         token_count = 0
@@ -105,7 +106,7 @@ def process_job(session_factory, job) -> dict:
                 doc_states.append(doc_copy)
             else:
                 # Run complete analysis
-                doc = engine.analyze_comment(resp.id, comment_text, project_id=project_id)
+                doc = engine.analyze_comment(resp.id, comment_text, project_id=project_id, nlp_config=nlp_config)
                 processed_cache[comment_text] = doc
                 doc_states.append(doc)
                 
@@ -167,6 +168,14 @@ def process_job(session_factory, job) -> dict:
         # 6. Recalculate theme counts
         ResponseRepository.update_theme_counts(session, project_id)
         
+        # 6.5 Run Background Competitor Suggestion Discovery
+        try:
+            from pipeline.competitor import discover_potential_competitors
+            discover_potential_competitors(session, project_id, doc_states, nlp_config)
+            print(f"[Worker] Competitor brand suggestion discovery scan completed for project {project_id}.", flush=True)
+        except Exception as suggest_err:
+            print(f"[Worker Error] Competitor brand suggestion discovery scan failed: {suggest_err}", flush=True)
+
         # 7. Update parent Project status to COMPLETED
         if project:
             project.status = "COMPLETED"

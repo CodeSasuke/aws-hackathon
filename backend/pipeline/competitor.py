@@ -7,7 +7,26 @@ from .interface import PipelineStage, DocState
 _project_config_cache: Dict[str, dict] = {}
 _comparison_phrases: Optional[list] = None
 
-def get_project_config(project_id: Optional[str] = None) -> dict:
+def get_project_config(project_id: Optional[str] = None, nlp_config: dict = None) -> dict:
+    if nlp_config and ("primaryBrand" in nlp_config or "competitors" in nlp_config):
+        primary = nlp_config.get("primaryBrand", "SurveyIQ")
+        comps = []
+        for comp in nlp_config.get("competitors", []):
+            if isinstance(comp, dict):
+                name = comp.get("name")
+                aliases = comp.get("aliases", [])
+                if name:
+                    comps.append(name)
+                for alias in aliases:
+                    if alias:
+                        comps.append(alias)
+            elif isinstance(comp, str):
+                comps.append(comp)
+        return {
+            "primaryBrand": primary,
+            "competitors": comps
+        }
+
     cache_key = project_id or "default"
     if cache_key in _project_config_cache:
         return _project_config_cache[cache_key]
@@ -66,7 +85,7 @@ class CompetitorStage(PipelineStage):
             doc.timings[self.name] = (time.perf_counter() - start_time) * 1000
             return doc
             
-        config = get_project_config(doc.project_id)
+        config = get_project_config(doc.project_id, doc.nlp_config)
         primary_brand = config.get("primaryBrand", "SurveyIQ").lower()
         competitors = config.get("competitors", [])
         
@@ -147,3 +166,115 @@ class CompetitorStage(PipelineStage):
                     
         doc.timings[self.name] = (time.perf_counter() - start_time) * 1000
         return doc
+
+def discover_potential_competitors(session, project_id: str, doc_states: list, nlp_config: dict) -> None:
+    from collections import Counter
+    import uuid
+    from database.models import CompetitorSuggestion
+    
+    candidate_counts = Counter()
+    
+    comp_keywords = {"prefer", "better than", "worse than", "switched to", "going back to", "rather buy", "compared to", "instead of", "switching", "than"}
+    
+    primary_brand = (nlp_config or {}).get("primaryBrand", "SurveyIQ").lower()
+    configured_brands = set()
+    for comp in (nlp_config or {}).get("competitors", []):
+        if isinstance(comp, dict):
+            configured_brands.add(comp.get("name", "").lower())
+            for alias in comp.get("aliases", []):
+                configured_brands.add(alias.lower())
+        elif isinstance(comp, str):
+            configured_brands.add(comp.lower())
+            
+    stopwords_to_ignore = {
+        "i", "we", "you", "they", "he", "she", "it", "me", "us", "them", "him", "her",
+        "surveyiq", "app", "application", "software", "system", "program", "tool", "website",
+        "company", "competitor", "competitors", "product", "products", "service", "services",
+        "price", "quality", "taste", "packaging", "beer", "flavor", "bottle", "can",
+        "one", "time", "day", "month", "year", "people", "user", "users", "customer", "customers",
+        "support", "team", "staff", "manager", "representative", "phone", "email", "chat",
+        "google", "amazon", "apple", "microsoft", "michelob", "ultra", "michelob ultra",
+        "survey", "feedback", "response", "question", "answer", "platform"
+    }
+    
+    for doc in doc_states:
+        spacy_doc = doc.spacy_doc
+        if not spacy_doc:
+            continue
+            
+        text_lower = doc.clean_text.lower()
+        in_comparison_context = any(k in text_lower for k in comp_keywords)
+        
+        # Extract Named Entities of type ORG or PRODUCT
+        for ent in spacy_doc.ents:
+            if ent.label_ in ("ORG", "PRODUCT"):
+                ent_text = ent.text.strip()
+                ent_lower = ent_text.lower()
+                
+                if len(ent_text) < 3 or len(ent_text) > 40:
+                    continue
+                if ent_lower in stopwords_to_ignore or primary_brand in ent_lower:
+                    continue
+                if ent_lower in configured_brands:
+                    continue
+                if any(stop == ent_lower or stop in ent_lower for stop in stopwords_to_ignore):
+                    continue
+                    
+                weight = 2 if in_comparison_context else 1
+                candidate_counts[ent_text] += weight
+                
+        # Fallback proper noun matching
+        for token in spacy_doc:
+            if token.pos_ == "PROPN":
+                token_text = token.text.strip()
+                token_lower = token_text.lower()
+                
+                if len(token_text) < 3 or len(token_text) > 30:
+                    continue
+                if token_lower in stopwords_to_ignore or primary_brand in token_lower:
+                    continue
+                if token_lower in configured_brands:
+                    continue
+                if any(stop == token_lower or stop in token_lower for stop in stopwords_to_ignore):
+                    continue
+                    
+                is_near_comp = False
+                idx = token.i
+                start_idx = max(0, idx - 4)
+                end_idx = min(len(spacy_doc), idx + 5)
+                for t in spacy_doc[start_idx:end_idx]:
+                    if t.text.lower() in comp_keywords:
+                        is_near_comp = True
+                        break
+                
+                if is_near_comp:
+                    candidate_counts[token_text] += 2
+                    
+    # Upsert suggestions
+    for brand, weight in candidate_counts.items():
+        # Title case to be nice
+        brand_cleaned = brand.strip()
+        if not any(char.isalpha() for char in brand_cleaned):
+            continue
+            
+        existing = session.query(CompetitorSuggestion).filter_by(projectId=project_id, brandName=brand_cleaned).first()
+        
+        mentions_raw = max(1, weight // 2)
+        conf_score = min(0.98, 0.5 + (weight * 0.05))
+        
+        if existing:
+            if existing.status == "PENDING":
+                existing.mentions += mentions_raw
+                existing.confidence = max(existing.confidence, conf_score)
+        else:
+            suggestion = CompetitorSuggestion(
+                id="cuid_" + str(uuid.uuid4())[:8],
+                projectId=project_id,
+                brandName=brand_cleaned,
+                mentions=mentions_raw,
+                confidence=conf_score,
+                status="PENDING"
+            )
+            session.add(suggestion)
+            
+    session.commit()

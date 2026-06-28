@@ -17,21 +17,38 @@ def merge_dicts(dict1: dict, dict2: dict) -> dict:
             dict1[k] = v
     return dict1
 
-def get_ontology(project_id: str = None) -> dict:
+def get_ontology(project_id: str = None, nlp_config: dict = None) -> dict:
+    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+    default_path = os.path.join(backend_dir, "config", "default", "ontology.yaml")
+    
+    ontology = {}
+    if os.path.exists(default_path):
+        with open(default_path, "r") as f:
+            default_data = yaml.safe_load(f)
+        ontology = default_data.get("ontology", {})
+        
+    # Check if database configuration overrides are present
+    if nlp_config and "categories" in nlp_config:
+        compiled_ontology = {}
+        for cat in nlp_config.get("categories", []):
+            cat_name = cat.get("name")
+            themes = cat.get("themes", [])
+            cat_dict = {}
+            for theme in themes:
+                theme_name = theme.get("name")
+                syns = theme.get("synonyms", [])
+                cat_dict[theme_name] = {"synonyms": syns}
+            compiled_ontology[cat_name] = cat_dict
+        
+        if compiled_ontology:
+            ontology = merge_dicts(copy.deepcopy(ontology), compiled_ontology)
+            return ontology
+
+    # Fallback to local files cache
     cache_key = project_id or "default"
     if cache_key in _ontology_cache:
         return _ontology_cache[cache_key]
         
-    backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-    default_path = os.path.join(backend_dir, "config", "default", "ontology.yaml")
-    
-    if not os.path.exists(default_path):
-        return {}
-        
-    with open(default_path, "r") as f:
-        default_data = yaml.safe_load(f)
-    ontology = default_data.get("ontology", {})
-    
     if project_id:
         proj_path = os.path.join(backend_dir, "config", f"project_{project_id}", "ontology.yaml")
         if os.path.exists(proj_path):
@@ -56,7 +73,7 @@ class AspectStage(PipelineStage):
             doc.timings[self.name] = (time.perf_counter() - start_time) * 1000
             return doc
             
-        ontology = get_ontology(doc.project_id)
+        ontology = get_ontology(doc.project_id, doc.nlp_config)
         
         # Split document into clauses by conjunctions (e.g. but, and, although) 
         # or punctuations (comma, period)

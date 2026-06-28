@@ -2,10 +2,11 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
 class DocState:
-    def __init__(self, doc_id: str, text: str, project_id: Optional[str] = None):
+    def __init__(self, doc_id: str, text: str, project_id: Optional[str] = None, nlp_config: Optional[dict] = None):
         self.id: str = doc_id
         self.text: str = text
         self.project_id: Optional[str] = project_id
+        self.nlp_config: dict = nlp_config or {}
         self.clean_text: str = text
         self.language: str = "English"
         

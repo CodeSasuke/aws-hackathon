@@ -63,8 +63,18 @@ def analyze_single_comment(request: SingleAnalyzeRequest):
         raise HTTPException(status_code=400, detail="Text cannot be empty.")
     
     try:
+        nlp_config = {}
+        if request.projectId:
+            session = get_session()
+            try:
+                project = session.query(Project).filter_by(id=request.projectId).first()
+                if project and project.nlpConfig:
+                    nlp_config = project.nlpConfig
+            finally:
+                session.close()
+                
         engine = AnalysisEngine()
-        doc = engine.analyze_comment("single_run", request.text, project_id=request.projectId)
+        doc = engine.analyze_comment("single_run", request.text, project_id=request.projectId, nlp_config=nlp_config)
         return doc.to_dict()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Pipeline error: {str(e)}")

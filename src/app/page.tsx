@@ -133,6 +133,9 @@ export default function Home() {
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectData, setProjectData] = useState<any>(null);
   const [responses, setResponses] = useState<any[]>([]);
+  const [nlpConfig, setNlpConfig] = useState<any>(null);
+  const [competitorSuggestions, setCompetitorSuggestions] = useState<any[]>([]);
+  const [suggestedAliases, setSuggestedAliases] = useState<{[key: string]: string}>({});
 
   // Authentication state
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -289,6 +292,83 @@ export default function Home() {
     setSelectedProjectId("");
     setProjectData(null);
     setResponses(MOCK_RESPONSES);
+    setNlpConfig(null);
+    setCompetitorSuggestions([]);
+  };
+
+  const fetchNLPConfig = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/nlp-config`);
+      if (res.ok) {
+        const data = await res.json();
+        setNlpConfig(data);
+      }
+    } catch (err) {
+      console.error("Error fetching NLP config", err);
+    }
+  };
+
+  const fetchCompetitorSuggestions = async (projectId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/competitor-suggestions`);
+      if (res.ok) {
+        const data = await res.json();
+        setCompetitorSuggestions(data);
+      }
+    } catch (err) {
+      console.error("Error fetching suggestions", err);
+    }
+  };
+
+  const saveNLPConfig = async (configPayload = nlpConfig) => {
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/nlp-config`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(configPayload)
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setNlpConfig(updated);
+        alert("NLP settings updated successfully.");
+      } else {
+        alert("Failed to update NLP settings.");
+      }
+    } catch (err) {
+      console.error("Error saving NLP config", err);
+    }
+  };
+
+  const handleApproveSuggestion = async (brandName: string, aliasesStr: string) => {
+    try {
+      const aliases = aliasesStr.split(",").map(a => a.trim()).filter(Boolean);
+      const res = await fetch(`/api/projects/${selectedProjectId}/competitor-suggestions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandName, status: "APPROVED", aliases })
+      });
+      if (res.ok) {
+        fetchNLPConfig(selectedProjectId);
+        fetchCompetitorSuggestions(selectedProjectId);
+      }
+    } catch (err) {
+      console.error("Error approving suggestion", err);
+    }
+  };
+
+  const handleRejectSuggestion = async (brandName: string) => {
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/competitor-suggestions`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ brandName, status: "REJECTED" })
+      });
+      if (res.ok) {
+        fetchCompetitorSuggestions(selectedProjectId);
+      }
+    } catch (err) {
+      console.error("Error rejecting suggestion", err);
+    }
   };
 
   useEffect(() => {
@@ -324,6 +404,9 @@ export default function Home() {
             duplicate: r.isDuplicate ? "YES" : "NO"
           };
         }));
+        
+        fetchNLPConfig(id);
+        fetchCompetitorSuggestions(id);
       }
     } catch (err) {
       console.error("Failed to load project details", err);
@@ -691,6 +774,17 @@ export default function Home() {
               <HelpCircle className="h-4.5 w-4.5 mr-3" />
               Predefined Queries
             </button>
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === "settings"
+                  ? "bg-blue-50 text-blue-600 border border-blue-100"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <SettingsIcon className="h-4.5 w-4.5 mr-3" />
+              NLP Brand & Settings
+            </button>
           </nav>
         </div>
 
@@ -783,6 +877,25 @@ export default function Home() {
           {/* TAB A: EXECUTIVE DASHBOARD */}
           {activeTab === "dashboard" && (
             <div className="space-y-8">
+              {competitorSuggestions.filter((s: any) => s.status === "PENDING").length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-center justify-between shadow-sm animate-pulse">
+                  <div className="flex items-center">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mr-3 flex-shrink-0" />
+                    <div>
+                      <h4 className="text-sm font-bold text-amber-800">Potential Competitors Detected</h4>
+                      <p className="text-xs text-amber-700 mt-0.5 font-sans">
+                        We discovered {competitorSuggestions.filter((s: any) => s.status === "PENDING").length} potential competitors in the survey responses. Review and approve them to update brand sentiment tracking.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setActiveTab("settings")}
+                    className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold py-1.5 px-3 rounded shadow transition-all whitespace-nowrap ml-4"
+                  >
+                    Review Suggestions
+                  </button>
+                </div>
+              )}
               {/* Header metrics card */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
@@ -1320,6 +1433,319 @@ export default function Home() {
                       {queryAnswer}
                     </div>
                   )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* TAB F: PROJECT BRAND & SETTINGS */}
+          {activeTab === "settings" && (
+            <div className="space-y-8 max-w-5xl mx-auto pb-16">
+              <div className="flex items-center justify-between border-b border-gray-200 pb-4">
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900">Project Brand & NLP Settings</h2>
+                  <p className="text-sm text-gray-500 mt-1">Configure your primary brand, competitors, categories, themes, and synonyms without code or YAML edits.</p>
+                </div>
+                <button
+                  onClick={() => saveNLPConfig()}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded text-sm transition-all shadow shadow-blue-100"
+                >
+                  Save Configurations
+                </button>
+              </div>
+
+              {nlpConfig ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Left Column: Brand Settings & Suggestions */}
+                  <div className="lg:col-span-1 space-y-8">
+                    {/* Brand Settings */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-4">
+                      <h3 className="font-bold text-sm text-gray-900 border-b border-gray-150 pb-2 uppercase tracking-wide">Brand Settings</h3>
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold text-gray-600">Primary Brand Name</label>
+                        <input
+                          type="text"
+                          value={nlpConfig.primaryBrand || ""}
+                          onChange={(e) => setNlpConfig({ ...nlpConfig, primaryBrand: e.target.value })}
+                          className="w-full bg-gray-50 border border-gray-200 rounded p-2 text-sm text-gray-800 outline-none focus:border-blue-500 transition-all font-medium"
+                          placeholder="e.g. Michelob Ultra"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Competitors List */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-4">
+                      <div className="flex items-center justify-between border-b border-gray-150 pb-2">
+                        <h3 className="font-bold text-sm text-gray-900 uppercase tracking-wide">Active Competitors</h3>
+                        <button
+                          onClick={() => {
+                            const updated = { ...nlpConfig };
+                            updated.competitors = updated.competitors || [];
+                            updated.competitors.push({ name: "New Competitor", aliases: [] });
+                            setNlpConfig(updated);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add
+                        </button>
+                      </div>
+
+                      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+                        {(!nlpConfig.competitors || nlpConfig.competitors.length === 0) ? (
+                          <p className="text-xs text-gray-400 italic">No competitors configured yet.</p>
+                        ) : (
+                          nlpConfig.competitors.map((comp: any, idx: number) => {
+                            const isString = typeof comp === "string";
+                            const name = isString ? comp : comp.name;
+                            const aliases = isString ? [] : comp.aliases || [];
+
+                            return (
+                              <div key={idx} className="bg-gray-50 border border-gray-200 rounded p-3 space-y-2 relative">
+                                <button
+                                  onClick={() => {
+                                    const updated = { ...nlpConfig };
+                                    updated.competitors.splice(idx, 1);
+                                    setNlpConfig(updated);
+                                  }}
+                                  className="absolute top-2 right-2 text-red-500 hover:text-red-755 text-xs font-bold"
+                                >
+                                  Remove
+                                </button>
+                                <div className="space-y-1 pr-14">
+                                  <label className="text-[10px] font-semibold text-gray-500">Name</label>
+                                  <input
+                                    type="text"
+                                    value={name}
+                                    onChange={(e) => {
+                                      const updated = { ...nlpConfig };
+                                      if (isString) {
+                                        updated.competitors[idx] = e.target.value;
+                                      } else {
+                                        updated.competitors[idx].name = e.target.value;
+                                      }
+                                      setNlpConfig(updated);
+                                    }}
+                                    className="w-full bg-white border border-gray-150 rounded px-2 py-1 text-xs text-gray-800 outline-none focus:border-blue-500 font-medium"
+                                  />
+                                </div>
+                                {!isString && (
+                                  <div className="space-y-1">
+                                    <label className="text-[10px] font-semibold text-gray-500">Aliases (Comma separated)</label>
+                                    <input
+                                      type="text"
+                                      value={aliases.join(", ")}
+                                      onChange={(e) => {
+                                        const updated = { ...nlpConfig };
+                                        updated.competitors[idx].aliases = e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean);
+                                        setNlpConfig(updated);
+                                      }}
+                                      className="w-full bg-white border border-gray-150 rounded px-2 py-1 text-xs text-gray-800 outline-none focus:border-blue-500 font-medium"
+                                      placeholder="e.g. Bud, Budlight"
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Columns: Categories & Themes / Suggestions */}
+                  <div className="lg:col-span-2 space-y-8">
+                    {/* Categories & Themes Management */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-6">
+                      <div className="flex items-center justify-between border-b border-gray-150 pb-2">
+                        <h3 className="font-bold text-sm text-gray-900 uppercase tracking-wide">Categories & Themes</h3>
+                        <button
+                          onClick={() => {
+                            const updated = { ...nlpConfig };
+                            updated.categories = updated.categories || [];
+                            updated.categories.push({
+                              name: "New Category",
+                              themes: [{ name: "General Theme", synonyms: [] }]
+                            });
+                            setNlpConfig(updated);
+                          }}
+                          className="text-xs text-blue-600 hover:text-blue-700 font-bold flex items-center"
+                        >
+                          <Plus className="h-3 w-3 mr-1" /> Add Category
+                        </button>
+                      </div>
+
+                      <div className="space-y-6">
+                        {(!nlpConfig.categories || nlpConfig.categories.length === 0) ? (
+                          <p className="text-xs text-gray-400 italic">No custom categories configured. Default fallbacks will be used.</p>
+                        ) : (
+                          nlpConfig.categories.map((cat: any, catIdx: number) => (
+                            <div key={catIdx} className="border border-gray-200 rounded-lg overflow-hidden">
+                              <div className="bg-gray-50 px-4 py-3 flex items-center justify-between border-b border-gray-200">
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs font-bold text-gray-500">Category:</span>
+                                  <input
+                                    type="text"
+                                    value={cat.name}
+                                    onChange={(e) => {
+                                      const updated = { ...nlpConfig };
+                                      updated.categories[catIdx].name = e.target.value;
+                                      setNlpConfig(updated);
+                                    }}
+                                    className="bg-transparent border-b border-dashed border-gray-300 font-bold text-sm text-gray-800 outline-none focus:border-blue-500 px-1 py-0.5"
+                                  />
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                  <button
+                                    onClick={() => {
+                                      const updated = { ...nlpConfig };
+                                      updated.categories[catIdx].themes = updated.categories[catIdx].themes || [];
+                                      updated.categories[catIdx].themes.push({ name: "New Theme", synonyms: [] });
+                                      setNlpConfig(updated);
+                                    }}
+                                    className="text-xs text-blue-600 hover:text-blue-755 font-bold"
+                                  >
+                                    + Add Theme
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      const updated = { ...nlpConfig };
+                                      updated.categories.splice(catIdx, 1);
+                                      setNlpConfig(updated);
+                                    }}
+                                    className="text-xs text-red-500 hover:text-red-750 font-bold"
+                                  >
+                                    Delete
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="p-4 space-y-4 bg-white">
+                                {(!cat.themes || cat.themes.length === 0) ? (
+                                  <p className="text-xs text-gray-400 italic">No themes under this category.</p>
+                                ) : (
+                                  cat.themes.map((theme: any, themeIdx: number) => (
+                                    <div key={themeIdx} className="bg-gray-50/50 border border-gray-150 rounded-lg p-3 space-y-2 relative">
+                                      <button
+                                        onClick={() => {
+                                          const updated = { ...nlpConfig };
+                                          updated.categories[catIdx].themes.splice(themeIdx, 1);
+                                          setNlpConfig(updated);
+                                        }}
+                                        className="absolute top-3 right-3 text-red-500 hover:text-red-750 text-xs font-bold"
+                                      >
+                                        Delete
+                                      </button>
+                                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="md:col-span-1 space-y-1">
+                                          <label className="text-[10px] font-semibold text-gray-500">Theme Name</label>
+                                          <input
+                                            type="text"
+                                            value={theme.name}
+                                            onChange={(e) => {
+                                              const updated = { ...nlpConfig };
+                                              updated.categories[catIdx].themes[themeIdx].name = e.target.value;
+                                              setNlpConfig(updated);
+                                            }}
+                                            className="w-full bg-white border border-gray-200 rounded px-2.5 py-1 text-xs text-gray-800 font-bold outline-none focus:border-blue-500"
+                                          />
+                                        </div>
+                                        <div className="md:col-span-2 space-y-1">
+                                          <label className="text-[10px] font-semibold text-gray-500">Classification Synonyms (Comma separated)</label>
+                                          <input
+                                            type="text"
+                                            value={theme.synonyms ? theme.synonyms.join(", ") : ""}
+                                            onChange={(e) => {
+                                              const updated = { ...nlpConfig };
+                                              updated.categories[catIdx].themes[themeIdx].synonyms = e.target.value.split(",").map((s: string) => s.trim()).filter(Boolean);
+                                              setNlpConfig(updated);
+                                            }}
+                                            className="w-full bg-white border border-gray-200 rounded px-2.5 py-1 text-xs text-gray-800 outline-none focus:border-blue-500"
+                                            placeholder="e.g. flavor, taste, mouthfeel"
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Discovered Competitor Suggestions Panel */}
+                    <div className="bg-white border border-gray-200 rounded-lg p-6 shadow-sm space-y-4">
+                      <div>
+                        <h3 className="font-bold text-sm text-gray-900 uppercase tracking-wide">Discovered Brand Suggestions</h3>
+                        <p className="text-xs text-gray-500 mt-0.5 font-sans">NER-detected brand names extracted from comments during the background queue analysis phase.</p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {competitorSuggestions.filter((s: any) => s.status === "PENDING").length === 0 ? (
+                          <div className="text-center py-6 border-2 border-dashed border-gray-100 rounded-lg">
+                            <CheckCircle className="h-6 w-6 text-emerald-500 mx-auto mb-2" />
+                            <p className="text-xs text-gray-400 font-medium">All brand suggestions resolved! No pending items to review.</p>
+                          </div>
+                        ) : (
+                          competitorSuggestions.filter((s: any) => s.status === "PENDING").map((s: any) => {
+                            const scorePct = Math.round(s.confidence * 100);
+                            return (
+                              <div key={s.id} className="flex flex-col md:flex-row md:items-center justify-between border border-gray-200 bg-gray-50/50 p-4 rounded-lg gap-4">
+                                <div>
+                                  <div className="flex items-center space-x-2">
+                                    <span className="font-bold text-sm text-gray-800">{s.brandName}</span>
+                                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                                      scorePct >= 80 ? "bg-emerald-50 text-emerald-600 border border-emerald-100" :
+                                      scorePct >= 65 ? "bg-blue-50 text-blue-600 border border-blue-100" :
+                                      "bg-gray-100 text-gray-600"
+                                    }`}>
+                                      {scorePct}% Confidence
+                                    </span>
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1 font-sans">
+                                    Mentioned <span className="font-bold text-gray-800">{s.mentions}</span> times in comparisons.
+                                  </p>
+                                </div>
+                                <div className="flex items-center space-x-3 self-end md:self-auto">
+                                  <div className="flex items-center space-x-1.5 bg-white border border-gray-200 rounded px-2.5 py-1">
+                                    <span className="text-[10px] font-semibold text-gray-500">Aliases:</span>
+                                    <input
+                                      type="text"
+                                      placeholder="Comma-separated"
+                                      value={suggestedAliases[s.brandName] || ""}
+                                      onChange={(e) => setSuggestedAliases({ ...suggestedAliases, [s.brandName]: e.target.value })}
+                                      className="text-xs border-none bg-transparent outline-none w-28 text-gray-800 placeholder-gray-400 font-medium"
+                                    />
+                                  </div>
+                                  <button
+                                    onClick={() => handleApproveSuggestion(s.brandName, suggestedAliases[s.brandName] || "")}
+                                    className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-1 px-3 rounded text-xs transition-colors"
+                                  >
+                                    Approve
+                                  </button>
+                                  <button
+                                    onClick={() => handleRejectSuggestion(s.brandName)}
+                                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-1 px-3 rounded text-xs transition-colors"
+                                  >
+                                    Ignore
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="py-12 text-center">
+                  <span className="flex h-3 w-3 relative mx-auto mb-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-blue-500"></span>
+                  </span>
+                  <p className="text-sm font-medium text-gray-500 font-sans">Loading NLP configuration details...</p>
                 </div>
               )}
             </div>
