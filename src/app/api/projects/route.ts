@@ -258,11 +258,18 @@ export async function POST(req: Request) {
       return proj;
     });
 
+    // Gather all unique keys across all rows to ensure blank columns in first row are represented
+    const allKeysSet = new Set<string>();
+    for (const row of rawRows) {
+      Object.keys(row).forEach(k => allKeysSet.add(k));
+    }
+    const allColumnsList = Array.from(allKeysSet);
+
     return NextResponse.json({
       message: "Project created successfully",
       projectId: project.id,
       detectedColumns: columnMappings,
-      allColumns: rawRows.length > 0 ? Object.keys(rawRows[0]) : [],
+      allColumns: allColumnsList,
       rowCount: rawRows.length
     }, { status: 201 });
   } catch (error) {
