@@ -132,7 +132,7 @@ export default function Home() {
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
   const [projectData, setProjectData] = useState<any>(null);
-  const [responses, setResponses] = useState<any[]>(MOCK_RESPONSES);
+  const [responses, setResponses] = useState<any[]>([]);
 
   // Authentication state
   const [currentUser, setCurrentUser] = useState<any>(null);
@@ -370,7 +370,7 @@ export default function Home() {
         setDetectedCols(projData.detectedColumns);
         setSelectedProjectId(projData.projectId);
         fetchProjects(currentUser?.email);
-        setAnalysisStatus("File linked! Click 'Analyze Responses' to start AI processing.");
+        setAnalysisStatus("File linked! Click 'Analyze Responses' to start processing.");
       }
     } catch (err) {
       console.error(err);
@@ -446,7 +446,7 @@ export default function Home() {
         );
       } else {
         setQueryAnswer(
-          "**AI Core Summary:** Analysis shows that positive highlights focus on Support Quality (95% CSAT), while negative sentiments center around performance reliability issues."
+          "**Core Summary:** Analysis shows that positive highlights focus on Support Quality (95% CSAT), while negative sentiments center around performance reliability issues."
         );
       }
       setLoadingQuery(false);
@@ -736,7 +736,32 @@ export default function Home() {
         </header>
 
         {/* Scrollable Workspace */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-8 flex flex-col">
+          {projects.length === 0 && activeTab !== "upload" ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white border border-gray-200 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm w-full">
+              <div className="h-16 w-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                <FileSpreadsheet className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-bold text-gray-900 font-sans font-sans">No Projects Found</h3>
+              <p className="text-sm text-gray-500 max-w-sm mt-2 leading-relaxed font-sans font-sans">
+                You haven&apos;t created any feedback analysis projects yet. Click the button below to upload your survey spreadsheet and start processing.
+              </p>
+              <button
+                onClick={() => {
+                  setDetectedCols(null);
+                  setFile(null);
+                  setProjectName("");
+                  setProjectDesc("");
+                  setAnalysisStatus("");
+                  setActiveTab("upload");
+                }}
+                className="mt-6 bg-blue-600 hover:bg-blue-700 text-white font-bold px-5 py-2.5 rounded text-xs uppercase tracking-wider transition-all shadow-sm cursor-pointer font-sans"
+              >
+                Create First Project
+              </button>
+            </div>
+          ) : (
+            <>
           
           {/* TAB A: EXECUTIVE DASHBOARD */}
           {activeTab === "dashboard" && (
@@ -753,7 +778,7 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">AI Quality Score</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Data Quality Score</p>
                   <p className="text-2xl font-bold mt-1 text-blue-600">
                     {projectData?.surveyFiles?.[0]?.qualityScore || 92}%
                   </p>
@@ -1189,7 +1214,7 @@ export default function Home() {
             <div className="max-w-3xl mx-auto space-y-6">
               <div className="bg-white border border-gray-200 rounded p-6 shadow-sm">
                 <h3 className="font-bold text-base text-gray-900 mb-2">Predefined Business Questions</h3>
-                <p className="text-sm text-gray-500 mb-6">Select a predefined business query to fetch insights. AI executes structured database lookups behind the scenes.</p>
+                <p className="text-sm text-gray-500 mb-6">Select a predefined business query to fetch insights. The database engine executes structured queries behind the scenes.</p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <button
@@ -1240,6 +1265,8 @@ export default function Home() {
                 </div>
               )}
             </div>
+          )}
+          </>
           )}
 
         </div>
