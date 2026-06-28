@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { GetObjectCommand } from "@aws-sdk/client-s3";
 import * as XLSX from "xlsx";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { s3Client } from "@/lib/aws";
 
@@ -142,7 +143,7 @@ export async function POST(req: Request) {
     const columnMappings = autoDetectColumns(rawRows);
 
     // 4. Create Project, SurveyFile, and Response rows in a database transaction
-    const project = await prisma.$transaction(async (tx) => {
+    const project = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const proj = await tx.project.create({
         data: {
           name,
