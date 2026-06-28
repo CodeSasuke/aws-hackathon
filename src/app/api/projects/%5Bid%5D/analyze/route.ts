@@ -27,7 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       await prisma.project.update({
         where: { id },
         data: { status: "FAILED" }
-      }).catch(e => console.error("Failed to set project status to FAILED:", e));
+      }).catch((e: unknown) => console.error("Failed to set project status to FAILED:", e));
     });
 
     return NextResponse.json({

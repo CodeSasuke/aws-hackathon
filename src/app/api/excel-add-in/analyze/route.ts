@@ -136,7 +136,7 @@ export async function POST(req: Request) {
                 productArea: repResult.productArea,
                 suggestedAction: repResult.suggestedAction
               }
-            }).catch(e => console.error("Cache write failure:", e));
+            }).catch((e: unknown) => console.error("Cache write failure:", e));
           }
         }
       }
