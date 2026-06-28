@@ -33,7 +33,13 @@ import {
   Award,
   Users,
   Layers,
-  Database
+  Database,
+  LogOut,
+  Lock,
+  Mail,
+  Plus,
+  Key,
+  Building
 } from "lucide-react";
 
 // Mock baseline data for demo out-of-the-box view
@@ -128,6 +134,16 @@ export default function Home() {
   const [projectData, setProjectData] = useState<any>(null);
   const [responses, setResponses] = useState<any[]>(MOCK_RESPONSES);
 
+  // Authentication state
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authOrg, setAuthOrg] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
+
   // Upload state
   const [projectName, setProjectName] = useState<string>("");
   const [projectDesc, setProjectDesc] = useState<string>("");
@@ -148,12 +164,28 @@ export default function Home() {
   const [sentimentFilter, setSentimentFilter] = useState<string>("ALL");
 
   useEffect(() => {
-    fetchProjects();
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("surveyiq_user");
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored);
+          setCurrentUser(parsed);
+          fetchProjects(parsed.email);
+        } catch (e) {
+          localStorage.removeItem("surveyiq_user");
+        }
+      } else {
+        fetchProjects();
+      }
+    }
   }, []);
 
-  const fetchProjects = async () => {
+  const fetchProjects = async (email?: string) => {
     try {
-      const res = await fetch("/api/projects");
+      const activeEmail = email || currentUser?.email;
+      const res = await fetch("/api/projects", {
+        headers: activeEmail ? { "x-user-email": activeEmail } : {}
+      });
       const data = await res.json();
       if (data.projects) {
         setProjects(data.projects);
@@ -164,6 +196,97 @@ export default function Home() {
     } catch (err) {
       console.error("Failed to load projects", err);
     }
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Login failed");
+      }
+      localStorage.setItem("surveyiq_user", JSON.stringify(data.user));
+      setCurrentUser(data.user);
+      fetchProjects(data.user.email);
+      setAuthEmail("");
+      setAuthPassword("");
+    } catch (err: any) {
+      setAuthError(err.message || "An unexpected error occurred");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      const res = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: authName,
+          email: authEmail,
+          password: authPassword,
+          orgName: authOrg
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Registration failed");
+      }
+      
+      // Auto login after registration
+      const loginRes = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: authEmail, password: authPassword })
+      });
+      const loginData = await loginRes.json();
+      if (loginRes.ok) {
+        localStorage.setItem("surveyiq_user", JSON.stringify(loginData.user));
+        setCurrentUser(loginData.user);
+        fetchProjects(loginData.user.email);
+      }
+      setAuthEmail("");
+      setAuthPassword("");
+      setAuthName("");
+      setAuthOrg("");
+    } catch (err: any) {
+      setAuthError(err.message || "An unexpected error occurred");
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleDemoAccess = () => {
+    const demoUser = {
+      id: "demo-id",
+      name: "Default Analyst",
+      email: "analyst@surveyiq.app",
+      role: "ANALYST",
+      organization: { name: "Default Org" }
+    };
+    localStorage.setItem("surveyiq_user", JSON.stringify(demoUser));
+    setCurrentUser(demoUser);
+    fetchProjects(demoUser.email);
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("surveyiq_user");
+    setCurrentUser(null);
+    setProjects([]);
+    setSelectedProjectId("");
+    setProjectData(null);
+    setResponses(MOCK_RESPONSES);
   };
 
   useEffect(() => {
@@ -229,7 +352,10 @@ export default function Home() {
       setAnalysisStatus("Parsing spreadsheet columns...");
       const projRes = await fetch("/api/projects", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          ...(currentUser?.email ? { "x-user-email": currentUser.email } : {})
+        },
         body: JSON.stringify({
           name: projectName,
           description: projectDesc,
@@ -243,7 +369,7 @@ export default function Home() {
       if (projData.projectId) {
         setDetectedCols(projData.detectedColumns);
         setSelectedProjectId(projData.projectId);
-        fetchProjects();
+        fetchProjects(currentUser?.email);
         setAnalysisStatus("File linked! Click 'Analyze Responses' to start AI processing.");
       }
     } catch (err) {
@@ -342,6 +468,135 @@ export default function Home() {
     return matchesSearch && r.sentiment === sentimentFilter;
   });
 
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6 font-sans antialiased">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
+          {/* Logo / Header */}
+          <div className="p-8 text-center bg-gray-50 border-b border-gray-100 flex flex-col items-center">
+            <div className="h-12 w-12 rounded-lg bg-blue-600 flex items-center justify-center text-white mb-3 shadow-md shadow-blue-100">
+              <Database className="h-6 w-6" />
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 tracking-tight font-sans">SurveyIQ</h1>
+            <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-widest font-semibold font-sans">Enterprise Survey Intelligence</p>
+          </div>
+
+          <div className="p-8">
+            {authError && (
+              <div className="mb-5 bg-red-50 border border-red-200 text-red-700 text-xs rounded p-3 font-semibold flex items-center font-sans">
+                <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
+                {authError}
+              </div>
+            )}
+
+            <form onSubmit={authMode === "login" ? handleLogin : handleSignup} className="space-y-4">
+              {authMode === "signup" && (
+                <>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 font-sans">Full Name</label>
+                    <div className="relative">
+                      <Users className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        required
+                        value={authName}
+                        onChange={(e) => setAuthName(e.target.value)}
+                        placeholder="John Doe"
+                        className="w-full bg-white border border-gray-300 rounded pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 font-sans"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 font-sans">Organization Name</label>
+                    <div className="relative">
+                      <Building className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                      <input
+                        type="text"
+                        required
+                        value={authOrg}
+                        onChange={(e) => setAuthOrg(e.target.value)}
+                        placeholder="Acme Corp"
+                        className="w-full bg-white border border-gray-300 rounded pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 font-sans"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 font-sans">Email Address</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <input
+                    type="email"
+                    required
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="analyst@company.com"
+                    className="w-full bg-white border border-gray-300 rounded pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1.5 font-sans">Password</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                  <input
+                    type="password"
+                    required
+                    value={authPassword}
+                    onChange={(e) => setAuthPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full bg-white border border-gray-300 rounded pl-10 pr-4 py-2 text-sm outline-none focus:border-blue-500 font-sans"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={authLoading}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded text-sm transition-colors shadow-sm disabled:opacity-50 mt-2 font-sans cursor-pointer"
+              >
+                {authLoading ? "Processing..." : authMode === "login" ? "Sign In" : "Create Account"}
+              </button>
+            </form>
+
+            <div className="relative flex items-center justify-center my-6">
+              <div className="border-t border-gray-200 w-full"></div>
+              <span className="absolute bg-white px-3 text-[10px] text-gray-400 font-bold uppercase tracking-widest font-sans">Or</span>
+            </div>
+
+            <button
+              onClick={handleDemoAccess}
+              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition-colors shadow-sm flex items-center justify-center font-sans cursor-pointer"
+            >
+              <Users className="h-4.5 w-4.5 mr-2" /> Continue to Demo Dashboard
+            </button>
+
+            <div className="mt-6 text-center text-xs text-gray-500 font-medium font-sans">
+              {authMode === "login" ? (
+                <p>
+                  Don&apos;t have an account?{" "}
+                  <button onClick={() => { setAuthMode("signup"); setAuthError(""); }} className="text-blue-600 hover:underline font-bold font-sans cursor-pointer bg-transparent border-0 outline-none">
+                    Sign Up
+                  </button>
+                </p>
+              ) : (
+                <p>
+                  Already have an account?{" "}
+                  <button onClick={() => { setAuthMode("login"); setAuthError(""); }} className="text-blue-600 hover:underline font-bold font-sans cursor-pointer bg-transparent border-0 outline-none">
+                    Sign In
+                  </button>
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-gray-50 text-gray-800 font-sans">
       
@@ -417,15 +672,23 @@ export default function Home() {
           </nav>
         </div>
 
-        {/* User profile footer */}
-        <div className="p-4 border-t border-gray-200 flex items-center bg-gray-50">
-          <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm">
-            US
+        {/* User profile footer & Sign Out */}
+        <div className="p-4 border-t border-gray-200 space-y-3 bg-gray-50">
+          <div className="flex items-center">
+            <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-sm uppercase">
+              {currentUser?.name ? currentUser.name.substring(0, 2) : "US"}
+            </div>
+            <div className="ml-3 truncate">
+              <p className="text-xs font-semibold text-gray-800 truncate">{currentUser?.name || "User Session"}</p>
+              <p className="text-[10px] text-gray-500 truncate">{currentUser?.organization?.name || "organization-analyst"}</p>
+            </div>
           </div>
-          <div className="ml-3">
-            <p className="text-xs font-semibold text-gray-800">User Session</p>
-            <p className="text-[10px] text-gray-500">organization-analyst</p>
-          </div>
+          <button
+            onClick={handleSignOut}
+            className="w-full flex items-center justify-center bg-white hover:bg-red-50 border border-gray-250 text-red-600 hover:text-red-700 hover:border-red-200 py-1.5 rounded text-xs font-bold transition-all"
+          >
+            <LogOut className="h-3.5 w-3.5 mr-2" /> Sign Out
+          </button>
         </div>
       </aside>
 
@@ -434,8 +697,8 @@ export default function Home() {
         
         {/* Top bar controls */}
         <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8">
-          <div className="flex items-center space-y-1">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest mr-2">Active Project:</span>
+          <div className="flex items-center space-x-3">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-widest">Active Project:</span>
             <select
               value={selectedProjectId}
               onChange={(e) => setSelectedProjectId(e.target.value)}
@@ -451,6 +714,19 @@ export default function Home() {
                 ))
               )}
             </select>
+            <button
+              onClick={() => {
+                setDetectedCols(null);
+                setFile(null);
+                setProjectName("");
+                setProjectDesc("");
+                setAnalysisStatus("");
+                setActiveTab("upload");
+              }}
+              className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-xs font-bold transition-all shadow-sm shadow-blue-100"
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Create Project
+            </button>
           </div>
           <div className="flex items-center space-x-3 text-xs text-gray-500 font-medium">
             <span className="flex items-center"><Award className="h-4 w-4 mr-1 text-yellow-500" /> AWS + Vercel Architecture</span>
