@@ -753,7 +753,7 @@ export default function Home() {
         </header>
 
         {/* Scrollable Workspace */}
-        <div className="flex-1 overflow-auto p-8 flex flex-col">
+        <div className="flex-1 overflow-y-auto p-8 flex flex-col">
           {projects.length === 0 && activeTab !== "upload" ? (
             <div className="flex-1 flex flex-col items-center justify-center p-8 bg-white border border-gray-200 rounded-xl max-w-2xl mx-auto my-12 text-center shadow-sm w-full">
               <div className="h-16 w-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
@@ -908,7 +908,7 @@ export default function Home() {
 
           {/* TAB B: UPLOAD DATA & AUTO COLUMN DETECT */}
           {activeTab === "upload" && (
-            <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
+            <div className="max-w-3xl mx-auto bg-white border border-gray-200 rounded shadow-sm">
               <div className="p-6 border-b border-gray-200 bg-gray-50">
                 <h2 className="font-bold text-lg text-gray-900">Upload New Survey File</h2>
                 <p className="text-sm text-gray-500 mt-1">Upload survey sheets in Excel (.xlsx) or CSV format. Column types will be auto-detected.</p>
