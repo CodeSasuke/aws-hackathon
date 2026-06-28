@@ -351,15 +351,7 @@ export async function analyzeBatchLocal(
  * Main analysis pipeline execution
  */
 export async function runSurveyAnalysisPipeline(projectId: string) {
-  const project = await prisma.project.findUnique({
-    where: { id: projectId }
-  });
-  if (!project) throw new Error("Project not found: " + projectId);
-
-  const activeJob = await prisma.analysisJob.findFirst({
-    where: { projectId, status: { in: ["PENDING", "ANALYZING"] } },
-    orderBy: { createdAt: "desc" }
-  });
+  let activeJob: any = null;
 
   const updateJobProgress = async (progress: number, status: JobStatus, errorMsg?: string) => {
     if (!activeJob) return;
@@ -379,6 +371,16 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
   };
 
   try {
+    const project = await prisma.project.findUnique({
+      where: { id: projectId }
+    });
+    if (!project) throw new Error("Project not found: " + projectId);
+
+    activeJob = await prisma.analysisJob.findFirst({
+      where: { projectId, status: { in: ["PENDING", "ANALYZING"] } },
+      orderBy: { createdAt: "desc" }
+    });
+
     await prisma.project.update({
       where: { id: projectId },
       data: { status: "PARSING" }

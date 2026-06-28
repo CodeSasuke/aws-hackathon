@@ -12,7 +12,11 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
         themes: {
           orderBy: { count: "desc" }
         },
-        reports: true
+        reports: true,
+        analysisJobs: {
+          orderBy: { createdAt: "desc" },
+          take: 1
+        }
       }
     });
 

@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { NextResponse, after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runSurveyAnalysisPipeline } from "@/lib/pipeline";
 
@@ -52,17 +52,19 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       data: { status: "PENDING" }
     });
 
-    // Trigger Next.js background execution of the pipeline
-    runSurveyAnalysisPipeline(id).catch(async (err) => {
-      console.error("Error executing background analysis pipeline:", err);
-      try {
-        await prisma.project.update({
-          where: { id },
-          data: { status: "FAILED" }
-        });
-      } catch (dbErr) {
-        console.error("Failed to update status to FAILED:", dbErr);
-      }
+    // Trigger Next.js background execution of the pipeline using after() to guarantee completion in serverless environments
+    after(() => {
+      runSurveyAnalysisPipeline(id).catch(async (err) => {
+        console.error("Error executing background analysis pipeline:", err);
+        try {
+          await prisma.project.update({
+            where: { id },
+            data: { status: "FAILED" }
+          });
+        } catch (dbErr) {
+          console.error("Failed to update status to FAILED:", dbErr);
+        }
+      });
     });
 
     return NextResponse.json({

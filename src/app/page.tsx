@@ -508,7 +508,8 @@ export default function Home() {
             loadProjectDetails(projectId);
             setActiveTab("dashboard");
           } else if (status === "FAILED") {
-            setAnalysisStatus("Analysis pipeline failed.");
+            const latestJob = data.project.analysisJobs?.[0];
+            setAnalysisStatus(`Analysis pipeline failed: ${latestJob?.error || "Unknown pipeline error"}`);
             if (pollingIntervalRef.current) {
               clearInterval(pollingIntervalRef.current);
               pollingIntervalRef.current = null;
