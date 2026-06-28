@@ -30,7 +30,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
 
     // Capture PDF output in buffer chunks
     const pdfPromise = new Promise<Buffer>((resolve, reject) => {
-      doc.on("data", (chunk) => chunks.push(chunk));
+      doc.on("data", (chunk: Buffer) => chunks.push(chunk));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", (err) => reject(err));
     });
@@ -86,7 +86,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     doc.fillColor("#333333");
 
     const findings = report.keyFindings as any[];
-    findings.forEach((finding, index) => {
+    findings.forEach((finding: any, index: number) => {
       // Box divider
       doc.rect(50, yOffset, 495, 80).fillAndStroke("#F2F5F8", "#D3D3D3"); // Light gray background box
       
@@ -109,7 +109,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     doc.fillColor("#1F497D").font("Helvetica-Bold").fontSize(12).text("Primary Themes Identified in Feedback:", 50, yOffset + 10);
     yOffset += 30;
 
-    project.themes.forEach((theme) => {
+    project.themes.forEach((theme: any) => {
       doc.fillColor("#333333")
          .font("Helvetica-Bold")
          .fontSize(10)
@@ -126,7 +126,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
 
     let recYOffset = 70;
     const recommendations = report.recommendations as any[];
-    recommendations.forEach((rec, index) => {
+    recommendations.forEach((rec: any, index: number) => {
       // Left border indicator (High priority = Red, Medium = Orange, Low = Gray)
       const colorMap: Record<string, string> = { HIGH: "#C00000", MEDIUM: "#E36C09", LOW: "#7F7F7F" };
       const priorityColor = colorMap[rec.priority?.toUpperCase()] || "#366092";

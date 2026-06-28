@@ -60,7 +60,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     const headerRow = dashSheet.lastRow;
     if (headerRow) {
       headerRow.font = { bold: true, color: { argb: "FFFFFF" } };
-      headerRow.eachCell((cell) => {
+      headerRow.eachCell((cell: any) => {
         cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "366092" } }; // Slate Blue
       });
     }
@@ -97,7 +97,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     // Style data headers
     const dataHeaderRow = dataSheet.getRow(1);
     dataHeaderRow.font = { bold: true, color: { argb: "FFFFFF" } };
-    dataHeaderRow.eachCell((cell) => {
+    dataHeaderRow.eachCell((cell: any) => {
       cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "1F497D" } };
     });
     dataSheet.getRow(1).height = 28;
@@ -107,7 +107,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
       const rowValue: Record<string, any> = {
         rowIndex: r.rowIndex,
         sentiment: r.sentiment || "PENDING",
-        theme: r.themeId ? (project.themes.find((t) => t.id === r.themeId)?.name || "N/A") : "N/A",
+        theme: r.themeId ? (project.themes.find((t: any) => t.id === r.themeId)?.name || "N/A") : "N/A",
         category: r.category || "N/A",
         intent: r.intent || "N/A",
         urgency: r.urgency || 0,
@@ -128,7 +128,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     }
 
     // Auto-align cells
-    dataSheet.eachRow((row) => {
+    dataSheet.eachRow((row: any) => {
       row.alignment = { vertical: "middle" };
     });
 
