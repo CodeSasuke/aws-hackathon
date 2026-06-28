@@ -737,11 +737,6 @@ export default function Home() {
               <Plus className="h-3.5 w-3.5 mr-1" /> Create Project
             </button>
           </div>
-          <div className="flex items-center space-x-3 text-xs text-gray-500 font-medium">
-            <span className="flex items-center"><Award className="h-4 w-4 mr-1 text-yellow-500" /> AWS + Vercel Architecture</span>
-            <span className="border-l border-gray-300 h-4"></span>
-            <span>Aurora PostgreSQL (Online)</span>
-          </div>
         </header>
 
         {/* Scrollable Workspace */}
