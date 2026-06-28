@@ -36,3 +36,38 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     return NextResponse.json({ error: "Failed to fetch project details" }, { status: 500 });
   }
 }
+
+export async function PATCH(req: Request, { params }: { params: Promise<any> }) {
+  try {
+    const { id } = await params;
+    const { textColumns } = await req.json();
+
+    if (!textColumns || !Array.isArray(textColumns)) {
+      return NextResponse.json({ error: "textColumns array is required" }, { status: 400 });
+    }
+
+    const surveyFile = await prisma.surveyFile.findFirst({
+      where: { projectId: id }
+    });
+
+    if (!surveyFile) {
+      return NextResponse.json({ error: "Survey file not found" }, { status: 404 });
+    }
+
+    const currentMappings = surveyFile.columnMappings as any || {};
+    const updatedMappings = {
+      ...currentMappings,
+      textCols: textColumns
+    };
+
+    await prisma.surveyFile.update({
+      where: { id: surveyFile.id },
+      data: { columnMappings: updatedMappings as any }
+    });
+
+    return NextResponse.json({ message: "Column mappings updated", columnMappings: updatedMappings });
+  } catch (error) {
+    console.error("PATCH Project Error:", error);
+    return NextResponse.json({ error: "Failed to update column mappings" }, { status: 500 });
+  }
+}

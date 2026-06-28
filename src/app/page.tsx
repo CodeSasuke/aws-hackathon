@@ -152,6 +152,8 @@ export default function Home() {
   const [analysisStatus, setAnalysisStatus] = useState<string>("");
   const [analysisProgress, setAnalysisProgress] = useState<number>(0);
   const [detectedCols, setDetectedCols] = useState<any>(null);
+  const [allColumns, setAllColumns] = useState<string[]>([]);
+  const [selectedTextCols, setSelectedTextCols] = useState<string[]>([]);
   const [tempKey, setTempKey] = useState<string>("");
 
   // Business queries
@@ -377,9 +379,11 @@ export default function Home() {
       
       if (projData.projectId) {
         setDetectedCols(projData.detectedColumns);
+        setAllColumns(projData.allColumns || []);
+        setSelectedTextCols(projData.detectedColumns?.textCols || []);
         setSelectedProjectId(projData.projectId);
         fetchProjects(currentUser?.email);
-        setAnalysisStatus("File linked! Click 'Analyze Responses' to start processing.");
+        setAnalysisStatus("File linked! Select your open-ended columns below, then click 'Analyze Responses'.");
       }
     } catch (err) {
       console.error(err);
@@ -392,10 +396,19 @@ export default function Home() {
   const handleStartAnalysis = async () => {
     if (!selectedProjectId) return;
     setUploading(true);
-    setAnalysisProgress(10);
-    setAnalysisStatus("Deduplicating responses...");
+    setAnalysisProgress(5);
+    setAnalysisStatus("Updating column mappings...");
 
     try {
+      // Update selected open-ended text columns in the database
+      await fetch(`/api/projects/${selectedProjectId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ textColumns: selectedTextCols })
+      });
+
+      setAnalysisProgress(10);
+      setAnalysisStatus("Deduplicating responses...");
       await fetch(`/api/projects/${selectedProjectId}/analyze`, { method: "POST" });
       
       // Poll analysis progress
@@ -964,8 +977,10 @@ export default function Home() {
                     
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div className="border border-gray-200 rounded p-3.5 bg-gray-50">
-                        <span className="text-[10px] uppercase font-bold text-gray-500">Text Response Field</span>
-                        <p className="text-sm font-semibold text-gray-800 mt-1 truncate">{detectedCols.textCols[0] || "None found"}</p>
+                        <span className="text-[10px] uppercase font-bold text-gray-500">Auto-Detected Text Fields</span>
+                        <p className="text-sm font-semibold text-gray-800 mt-1 truncate">
+                          {detectedCols.textCols?.join(", ") || "None found"}
+                        </p>
                       </div>
                       <div className="border border-gray-200 rounded p-3.5 bg-gray-50">
                         <span className="text-[10px] uppercase font-bold text-gray-500">Numeric Rating Field</span>
@@ -974,6 +989,36 @@ export default function Home() {
                       <div className="border border-gray-200 rounded p-3.5 bg-gray-50">
                         <span className="text-[10px] uppercase font-bold text-gray-500">Date Timestamp Field</span>
                         <p className="text-sm font-semibold text-gray-800 mt-1 truncate">{detectedCols.dateCols[0] || "None found"}</p>
+                      </div>
+                    </div>
+
+                    {/* Column Selection Override */}
+                    <div className="space-y-3">
+                      <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">Select Open-Ended Feedback Columns</label>
+                      <p className="text-xs text-gray-500 leading-normal">
+                        Select the column(s) containing open-ended qualitative comments to analyze. The pipeline will process all selected columns to determine row-level data quality.
+                      </p>
+                      <div className="border border-gray-250 rounded max-h-48 overflow-y-auto divide-y divide-gray-100 bg-white p-2.5 shadow-inner">
+                        {allColumns.map((col) => {
+                          const isChecked = selectedTextCols.includes(col);
+                          return (
+                            <label key={col} className="flex items-center space-x-3 py-2 px-2 hover:bg-gray-50 cursor-pointer rounded select-none">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setSelectedTextCols([...selectedTextCols, col]);
+                                  } else {
+                                    setSelectedTextCols(selectedTextCols.filter(c => c !== col));
+                                  }
+                                }}
+                                className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 border-gray-300 cursor-pointer"
+                              />
+                              <span className="text-sm text-gray-700 font-medium truncate">{col}</span>
+                            </label>
+                          );
+                        })}
                       </div>
                     </div>
 
