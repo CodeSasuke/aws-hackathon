@@ -379,7 +379,7 @@ export default function Home() {
     setProjects([]);
     setSelectedProjectId("");
     setProjectData(null);
-    setResponses(MOCK_RESPONSES);
+    setResponses([]);
     setNlpConfig(null);
     setCompetitorSuggestions([]);
   };
@@ -1093,10 +1093,16 @@ export default function Home() {
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
                   <p className="text-xs font-semibold text-gray-500 uppercase">Top Theme Friction</p>
                   <p className="text-lg font-bold mt-1 text-gray-900 truncate">
-                    {projectData?.themes?.[0]?.name || "Checkout Reliability"}
+                    {projectData?.themes?.[0]?.name || "N/A"}
                   </p>
-                  <p className="text-[10px] text-red-500 mt-2 flex items-center">
-                    <AlertTriangle className="h-3 w-3 mr-1" /> Requires engineering patch
+                  <p className="text-[10px] text-gray-500 mt-2 flex items-center">
+                    {projectData?.themes?.[0] ? (
+                      <>
+                        <AlertTriangle className="h-3.5 w-3.5 mr-1 text-amber-500" /> Count: {projectData.themes[0].count} ({projectData.themes[0].category || "General"})
+                      </>
+                    ) : (
+                      "No themes processed yet."
+                    )}
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
@@ -1114,16 +1120,24 @@ export default function Home() {
                 {/* 1. Theme Distribution */}
                 <div className="bg-white border border-gray-200 rounded p-6 shadow-sm">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Top Detected Themes</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={projectData?.themes?.length > 0 ? projectData.themes.slice(0, 5) : MOCK_THEMES} layout="vertical">
-                        <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-                        <XAxis type="number" />
-                        <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11 }} />
-                        <Tooltip />
-                        <Bar dataKey="count" fill="#1F497D" barSize={18} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                  <div className="h-64 flex flex-col justify-center">
+                    {projectData?.themes && projectData.themes.length > 0 ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={projectData.themes.slice(0, 5)} layout="vertical">
+                          <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                          <XAxis type="number" />
+                          <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 11 }} />
+                          <Tooltip />
+                          <Bar dataKey="count" fill="#1F497D" barSize={18} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-center p-4">
+                        <Layers className="h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-xs font-semibold text-gray-700">No themes detected</p>
+                        <p className="text-[10px] text-gray-400 mt-1 max-w-xs">Run analysis on your uploaded data to extract feedback themes.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1131,56 +1145,74 @@ export default function Home() {
                 <div className="bg-white border border-gray-200 rounded p-6 shadow-sm flex flex-col justify-between">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Sentiment Breakdown</h3>
                   <div className="flex items-center h-52">
-                    <div className="w-1/2 h-full">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <PieChart>
-                          <Pie
-                            data={sentimentBreakdown}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={60}
-                            outerRadius={80}
-                            paddingAngle={5}
-                            dataKey="value"
-                          >
-                            {sentimentBreakdown.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.color} />
-                            ))}
-                          </Pie>
-                          <Tooltip />
-                        </PieChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="w-1/2 space-y-4">
-                      {sentimentBreakdown.map((s, idx) => (
-                        <div key={idx} className="flex items-center justify-between border-b border-gray-100 pb-2">
-                          <span className="flex items-center text-sm font-medium">
-                            <span className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: s.color }}></span>
-                            {s.name}
-                          </span>
-                          <span className="text-sm font-bold text-gray-700">{s.value}</span>
+                    {responses.length > 0 && responses.some(r => r.sentiment === "POSITIVE" || r.sentiment === "NEGATIVE" || r.sentiment === "NEUTRAL") ? (
+                      <>
+                        <div className="w-1/2 h-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={sentimentBreakdown}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                {sentimentBreakdown.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.color} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
                         </div>
-                      ))}
-                    </div>
+                        <div className="w-1/2 space-y-4">
+                          {sentimentBreakdown.map((s, idx) => (
+                            <div key={idx} className="flex items-center justify-between border-b border-gray-100 pb-2">
+                              <span className="flex items-center text-sm font-medium">
+                                <span className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: s.color }}></span>
+                                {s.name}
+                              </span>
+                              <span className="text-sm font-bold text-gray-700">{s.value}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center w-full text-center">
+                        <TrendingUp className="h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-xs font-semibold text-gray-700">No sentiment data</p>
+                        <p className="text-[10px] text-gray-400 mt-1 max-w-xs">Run analysis on your uploaded data to extract feedback sentiments.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
                 {/* 3. Sentiment Trend Line */}
                 <div className="bg-white border border-gray-200 rounded p-6 shadow-sm md:col-span-2">
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Sentiment & Feedback Trend</h3>
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={sentimentTrend}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="name" />
-                        <YAxis />
-                        <Tooltip />
-                        <Legend />
-                        <Line type="monotone" dataKey="Positive" stroke="#10B981" strokeWidth={2.5} />
-                        <Line type="monotone" dataKey="Negative" stroke="#EF4444" strokeWidth={2.5} />
-                        <Line type="monotone" dataKey="Neutral" stroke="#9CA3AF" strokeWidth={2.5} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  <div className="h-64 flex flex-col justify-center">
+                    {responses.length > 0 && responses.some(r => r.sentiment === "POSITIVE" || r.sentiment === "NEGATIVE" || r.sentiment === "NEUTRAL") ? (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={sentimentTrend}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="name" />
+                          <YAxis />
+                          <Tooltip />
+                          <Legend />
+                          <Line type="monotone" dataKey="Positive" stroke="#10B981" strokeWidth={2.5} />
+                          <Line type="monotone" dataKey="Negative" stroke="#EF4444" strokeWidth={2.5} />
+                          <Line type="monotone" dataKey="Neutral" stroke="#9CA3AF" strokeWidth={2.5} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center text-center p-4">
+                        <TrendingUp className="h-8 w-8 text-gray-400 mb-2" />
+                        <p className="text-xs font-semibold text-gray-700">No trend data available</p>
+                        <p className="text-[10px] text-gray-400 mt-1 max-w-xs">Run analysis on your uploaded data to view sentiment trends over time.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
 
