@@ -14,44 +14,75 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
 
   const firstRow = rows[0];
   const keys = Object.keys(firstRow);
+  const totalRowsCount = rows.length;
 
   for (const key of keys) {
     const keyLower = key.toLowerCase();
     
-    // Find representative values for the column across the first few rows
-    const valuesSample = rows.slice(0, 5).map(r => r[key]).filter(v => v !== null && v !== undefined);
-    if (valuesSample.length === 0) continue;
-    const value = valuesSample[0];
+    // Gather all non-empty values for this column across the dataset
+    const values = rows
+      .map(r => r[key])
+      .filter(v => v !== null && v !== undefined && v.toString().trim() !== "");
+      
+    if (values.length === 0) continue;
+    const firstVal = values[0];
 
-    // Check by header name keywords or value types
+    // 1. Date checks
     if (
       keyLower.includes("date") ||
       keyLower.includes("time") ||
       keyLower.includes("created") ||
-      !isNaN(Date.parse(value.toString())) && value.toString().includes("-")
+      (!isNaN(Date.parse(firstVal.toString())) && firstVal.toString().includes("-"))
     ) {
       dateCols.push(key);
-    } else if (
-      keyLower.includes("rate") ||
-      keyLower.includes("rating") ||
-      keyLower.includes("score") ||
-      keyLower.includes("csat") ||
-      keyLower.includes("nps") ||
-      typeof value === "number"
-    ) {
-      ratingCols.push(key);
-    } else if (
+      continue;
+    }
+
+    // 2. Rating score checks (all numeric values)
+    const isAllNumbers = values.every(v => !isNaN(Number(v.toString().trim())));
+    if (isAllNumbers) {
+      const isIdColumn = keyLower.includes("id") || keyLower.includes("index") || keyLower.includes("row");
+      if (!isIdColumn) {
+        ratingCols.push(key);
+      }
+      continue;
+    }
+
+    // 3. Open-ended vs. Multiple-choice Categorical checks
+    const uniqueValues = new Set(values.map(v => v.toString().trim()));
+    const uniquenessRatio = uniqueValues.size / values.length;
+    
+    const wordCounts = values.map(v => v.toString().trim().split(/\s+/).length);
+    const avgWordCount = wordCounts.reduce((a, b) => a + b, 0) / values.length;
+
+    const hasFeedbackKeywords = 
       keyLower.includes("feedback") ||
       keyLower.includes("comment") ||
       keyLower.includes("response") ||
-      keyLower.includes("text") ||
+      keyLower.includes("explain") ||
+      keyLower.includes("describe") ||
       keyLower.includes("why") ||
       keyLower.includes("what") ||
-      (
-        typeof value === "string" && 
-        value.trim().length > 12 && 
-        !["yes", "no", "true", "false"].includes(value.trim().toLowerCase())
-      )
+      keyLower.includes("open") ||
+      keyLower.includes("oe_") ||
+      keyLower.includes("openended");
+
+    // Standard rating scale or category keywords representing closed multiple choice selections
+    const scaleKeywords = [
+      "relevant", "appealing", "different", "believable", "expensive", "buy", "frequency",
+      "praise", "neutral", "agree", "disagree", "satisfied", "dissatisfied", "probably", "definitely",
+      "male", "female", "urban", "rural", "town", "city", "suburban", "yes", "no"
+    ];
+    const hasScaleValues = values.slice(0, 10).some(v => 
+      scaleKeywords.some(kw => v.toString().toLowerCase().includes(kw))
+    );
+
+    const isLongEnough = values.some(v => v.toString().trim().length > 12);
+    const isCardinalityHigh = totalRowsCount > 10 ? uniquenessRatio > 0.35 : uniquenessRatio >= 0.6;
+
+    if (
+      (isCardinalityHigh && avgWordCount > 1.8 && isLongEnough && !hasScaleValues) ||
+      (hasFeedbackKeywords && avgWordCount > 1.5)
     ) {
       textCols.push(key);
     }
@@ -102,7 +133,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { name, description, s3Key, filename, fileSize } = await req.json();
+    const { name, description, s3Key, filename, fileSize, textColumns } = await req.json();
 
     if (!name || !s3Key || !filename) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -170,8 +201,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Uploaded survey file is empty" }, { status: 400 });
     }
 
-    // 3. Auto-detect columns
+    // 3. Auto-detect columns, then override textCols if user specified them
     const columnMappings = autoDetectColumns(rawRows);
+    
+    // If user explicitly provided open-ended text columns, use those instead
+    if (textColumns && Array.isArray(textColumns) && textColumns.length > 0) {
+      columnMappings.textCols = textColumns;
+    }
 
     // 4. Create Project, SurveyFile, and Response rows in a database transaction
     const project = await prisma.$transaction(async (tx: any) => {
@@ -215,6 +251,7 @@ export async function POST(req: Request) {
       message: "Project created successfully",
       projectId: project.id,
       detectedColumns: columnMappings,
+      allColumns: rawRows.length > 0 ? Object.keys(rawRows[0]) : [],
       rowCount: rawRows.length
     }, { status: 201 });
   } catch (error) {
