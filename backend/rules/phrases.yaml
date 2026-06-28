@@ -1,0 +1,37 @@
+version: "1.0"
+phrase_overrides:
+  - phrase: "not my cup of tea"
+    sentiment: "NEGATIVE"
+    category: "Product Quality"
+    theme: "General Dislike"
+    intent: "Complaint"
+  
+  - phrase: "piece of cake"
+    sentiment: "POSITIVE"
+    category: "Other"
+    theme: "General Praise"
+    intent: "Praise"
+
+  - phrase: "waste of money"
+    sentiment: "NEGATIVE"
+    category: "Pricing"
+    theme: "Pricing Dislike"
+    intent: "Complaint"
+
+  - phrase: "leave a bad taste"
+    sentiment: "NEGATIVE"
+    category: "Product Quality"
+    theme: "Taste Dislike"
+    intent: "Complaint"
+
+  - phrase: "top notch"
+    sentiment: "POSITIVE"
+    category: "Product Quality"
+    theme: "General Praise"
+    intent: "Praise"
+
+  - phrase: "hit or miss"
+    sentiment: "NEUTRAL"
+    category: "Product Quality"
+    theme: "Mixed Feedback"
+    intent: "Feedback"

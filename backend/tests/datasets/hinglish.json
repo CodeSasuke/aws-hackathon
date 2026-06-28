@@ -1,0 +1,26 @@
+[
+  {
+    "text": "Taste acha hai but bottle bakwas hai",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Taste", "Product.Packaging.Bottle"],
+      "intent": "Feedback"
+    }
+  },
+  {
+    "text": "bohot badhiya flavor hai, regular buy karunga",
+    "expected": {
+      "sentiment": "POSITIVE",
+      "aspects": ["Product.Taste"],
+      "intent": "Purchase Again"
+    }
+  },
+  {
+    "text": "bottle kharab hai aur price bohot expensive hai",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Packaging.Bottle", "Price"],
+      "intent": "Complaint"
+    }
+  }
+]

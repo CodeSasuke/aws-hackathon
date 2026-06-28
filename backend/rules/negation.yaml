@@ -1,0 +1,44 @@
+version: "1.0"
+negators:
+  - "not"
+  - "never"
+  - "no"
+  - "without"
+  - "hardly"
+  - "barely"
+  - "isn't"
+  - "isnt"
+  - "doesn't"
+  - "doesnt"
+  - "can't"
+  - "cant"
+  - "won't"
+  - "wont"
+  - "wouldn't"
+  - "wouldnt"
+  - "shouldn't"
+  - "shouldnt"
+  - "wasn't"
+  - "wasnt"
+
+contrastive_conjunctions:
+  - "but"
+  - "however"
+  - "although"
+  - "yet"
+  - "still"
+  - "except"
+
+intensifiers:
+  "very": 1.5
+  "extremely": 2.0
+  "highly": 1.8
+  "incredibly": 2.0
+  "really": 1.4
+
+downtoners:
+  "slightly": 0.5
+  "somewhat": 0.7
+  "marginally": 0.6
+  "a bit": 0.6
+  "little": 0.8

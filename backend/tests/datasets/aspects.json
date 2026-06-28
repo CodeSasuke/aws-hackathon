@@ -1,0 +1,26 @@
+[
+  {
+    "text": "The bottle has a very neat gold label design.",
+    "expected": {
+      "aspects": ["Product.Packaging.Bottle", "Product.Packaging.Label"]
+    }
+  },
+  {
+    "text": "Very expensive pricing, not worth the money.",
+    "expected": {
+      "aspects": ["Price"]
+    }
+  },
+  {
+    "text": "Glad to see it is low calorie and has low carbs.",
+    "expected": {
+      "aspects": ["Product.Nutrition.Calories", "Product.Nutrition.Carbs"]
+    }
+  },
+  {
+    "text": "I can never find this bottle in my local retail stores.",
+    "expected": {
+      "aspects": ["Product.Packaging.Bottle", "Availability"]
+    }
+  }
+]

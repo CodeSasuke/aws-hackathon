@@ -19,20 +19,25 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       return NextResponse.json({ message: "Analysis already in progress", status: project.status }, { status: 200 });
     }
 
-    // Start hybrid AI pipeline asynchronously in the background
-    runSurveyAnalysisPipeline(id).catch(async (error) => {
-      console.error(`Background analysis failed for project ${id}:`, error);
-      
-      // Update status to FAILED
-      await prisma.project.update({
-        where: { id },
-        data: { status: "FAILED" }
-      }).catch((e: unknown) => console.error("Failed to set project status to FAILED:", e));
+    // Create an AnalysisJob task directly in the queue using Prisma
+    await prisma.analysisJob.create({
+      data: {
+        projectId: id,
+        status: "PENDING",
+        priority: 0,
+        progress: 0
+      }
+    });
+
+    // Update parent Project status to PENDING
+    await prisma.project.update({
+      where: { id },
+      data: { status: "PENDING" }
     });
 
     return NextResponse.json({
-      message: "Analysis pipeline started successfully",
-      status: "PARSING"
+      message: "Analysis job scheduled in queue successfully",
+      status: "PENDING"
     }, { status: 200 });
   } catch (error) {
     console.error("POST Analyze Error:", error);

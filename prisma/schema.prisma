@@ -23,6 +23,7 @@ enum JobStatus {
   GENERATING_REPORTS
   COMPLETED
   FAILED
+  DEAD_LETTER
 }
 
 enum Sentiment {
@@ -68,6 +69,7 @@ model Project {
   themes         Theme[]
   reports        Report[]
   auditLogs      AuditLog[]
+  analysisJobs   AnalysisJob[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
@@ -113,12 +115,24 @@ model Response {
   isDuplicate     Boolean    @default(false)
   representativeQuote String?
   clusterId       String?
+
+  // Enterprise Metadata Versioning
+  language        String?    @default("English")
+  processedAt     DateTime?
+  nlpVersion      String?
+  ontologyVersion String?
+  ruleVersion     String?
+  nlpMetadata     Json?      // Store aspects, emotions, timings, explanation, matched rules
   
   createdAt       DateTime   @default(now())
 
   @@index([projectId])
   @@index([themeId])
   @@index([responseHash])
+  @@index([clusterId])
+  @@index([processedAt])
+  @@index([confidenceScore])
+  @@index([language])
 }
 
 model ResponseCache {
@@ -169,4 +183,34 @@ model AuditLog {
   action    String
   metadata  Json?
   timestamp DateTime @default(now())
+}
+
+model AnalysisJob {
+  id                 String    @id @default(cuid())
+  projectId          String
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status             JobStatus @default(PENDING)
+  priority           Int       @default(0)
+  progress           Int       @default(0)
+  retryCount         Int       @default(0)
+  maxRetries         Int       @default(3)
+  workerId           String?
+  error              String?
+  
+  // Heartbeat & Timeout
+  heartbeatAt        DateTime?
+  leaseExpiresAt     DateTime?
+
+  // Processing Metrics
+  processingTimeMs   Int       @default(0)
+  tokensProcessed    Int       @default(0)
+  responsesProcessed Int       @default(0)
+  memoryUsageMB      Float     @default(0.0)
+
+  createdAt          DateTime  @default(now())
+  startedAt          DateTime?
+  completedAt        DateTime?
+
+  @@index([status])
+  @@index([projectId, status])
 }

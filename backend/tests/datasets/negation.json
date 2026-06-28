@@ -1,0 +1,23 @@
+[
+  {
+    "text": "The flavor is not sweet at all.",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Taste.Sweetness"]
+    }
+  },
+  {
+    "text": "I don't like the color of the label.",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Packaging.Label"]
+    }
+  },
+  {
+    "text": "This is not very expensive.",
+    "expected": {
+      "sentiment": "POSITIVE",
+      "aspects": ["Price"]
+    }
+  }
+]

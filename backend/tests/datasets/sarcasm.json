@@ -1,0 +1,26 @@
+[
+  {
+    "text": "I just prefer other brands with much greater taste.",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Taste"],
+      "intent": "Switch Brand"
+    }
+  },
+  {
+    "text": "Oh great, another light beer that tastes like watered down soap.",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Taste"],
+      "intent": "Complaint"
+    }
+  },
+  {
+    "text": "Not bad at all, I'd rather buy this than the regular version.",
+    "expected": {
+      "sentiment": "POSITIVE",
+      "aspects": ["Product"],
+      "intent": "Purchase Again"
+    }
+  }
+]

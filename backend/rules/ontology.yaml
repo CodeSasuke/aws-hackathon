@@ -1,0 +1,39 @@
+version: "1.0"
+ontology:
+  Product:
+    synonyms: ["beer", "drink", "product", "beverage", "liquid", "brew", "it"]
+    Taste:
+      synonyms: ["taste", "flavor", "mouthfeel", "tasty", "delicious", "tasted"]
+      subcategories:
+        Aftertaste:
+          synonyms: ["aftertaste", "after-taste", "finish", "after taste", "lingering"]
+        Sweetness:
+          synonyms: ["sweet", "sweetness", "sugary"]
+        Bitterness:
+          synonyms: ["bitter", "bitterness", "harsh", "aftertaste"]
+        Smoothness:
+          synonyms: ["smooth", "smoothness", "refreshing", "clean", "easy to drink"]
+    Packaging:
+      synonyms: ["packaging", "package", "bottle", "can", "glass", "box", "wrapper"]
+      subcategories:
+        Bottle:
+          synonyms: ["bottle", "glass", "glass bottle", "bottle design"]
+        Label:
+          synonyms: ["label", "font", "gold", "color", "logo", "text", "presentation"]
+        Size:
+          synonyms: ["size", "volume", "ounce", "oz", "ml", "amount", "portion"]
+    Nutrition:
+      synonyms: ["nutrition", "healthy", "diet", "ingredients", "organic"]
+      subcategories:
+        Calories:
+          synonyms: ["calories", "calorie", "cal", "low calorie", "low-cal"]
+        Sugar:
+          synonyms: ["sugar", "sugars", "no sugar"]
+        Carbs:
+          synonyms: ["carbs", "carb", "carbohydrates", "low carb"]
+  Price:
+    synonyms: ["price", "cost", "expensive", "cheap", "money", "affordable", "value", "costly", "pricing"]
+  Availability:
+    synonyms: ["availability", "store", "local", "purchase", "find", "buy", "distribution", "retail", "available", "stores"]
+  Customer_Service:
+    synonyms: ["service", "support", "help", "customer service", "chat", "rep", "representative"]

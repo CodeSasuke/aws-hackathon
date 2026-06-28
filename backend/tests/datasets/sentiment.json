@@ -1,0 +1,26 @@
+[
+  {
+    "text": "The taste is absolutely amazing, I love it!",
+    "expected": {
+      "sentiment": "POSITIVE",
+      "aspects": ["Product.Taste"],
+      "intent": "Praise"
+    }
+  },
+  {
+    "text": "This drink is terrible, it has a horrible lingering aftertaste.",
+    "expected": {
+      "sentiment": "NEGATIVE",
+      "aspects": ["Product.Taste.Aftertaste"],
+      "intent": "Complaint"
+    }
+  },
+  {
+    "text": "It was alright, nothing special just a regular beer.",
+    "expected": {
+      "sentiment": "NEUTRAL",
+      "aspects": ["Product"],
+      "intent": "Feedback"
+    }
+  }
+]

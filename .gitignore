@@ -40,3 +40,14 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Python NLP Cache & Virtual Environment
+backend/models/cache/
+backend/pipeline/__pycache__/
+backend/database/__pycache__/
+backend/database/repositories/__pycache__/
+backend/tests/__pycache__/
+__pycache__/
+.venv/
+backend/.venv/
+scratch/

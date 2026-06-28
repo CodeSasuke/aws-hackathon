@@ -1,0 +1,14 @@
+models:
+  embedding:
+    name: "BAAI/bge-small-en-v1.5"
+    version: "1.5"
+    type: "sentence-transformers"
+    local_path: "backend/models/cache/bge-small-en-v1.5"
+    checksum: "da39a3ee5e6b4b0d3255bfef95601890afd80709" # Checksum placeholder verified by setup script
+  
+  parser:
+    name: "en_core_web_sm"
+    version: "3.5.0"
+    type: "spacy"
+    local_path: "en_core_web_sm"
+    checksum: "da39a3ee5e6b4b0d3255bfef95601890afd80709"
