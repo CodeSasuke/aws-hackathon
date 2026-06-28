@@ -678,6 +678,30 @@ export default function Home() {
     }
   };
 
+  const handleForceResetAnalysis = async () => {
+    if (!selectedProjectId) return;
+    if (!confirm("Are you sure you want to force reset the ongoing analysis? This will interrupt any active processing jobs and restart the analysis from the beginning.")) {
+      return;
+    }
+
+    setUploading(true);
+    setAnalysisProgress(5);
+    setAnalysisStatus("Force resetting previous jobs...");
+
+    try {
+      await fetch(`/api/projects/${selectedProjectId}/analyze`, { 
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ force: true })
+      });
+      
+      startPollingAnalysis(selectedProjectId);
+    } catch (err) {
+      console.error(err);
+      setUploading(false);
+    }
+  };
+
   const handleBusinessQuery = async (queryText: string) => {
     setSelectedQuery(queryText);
     setLoadingQuery(true);
@@ -1301,6 +1325,12 @@ export default function Home() {
                             ></div>
                           </div>
                           <p className="text-[10px] text-blue-600 font-medium">Please do not navigate away or refresh the page until the analysis is fully completed.</p>
+                          <button
+                            onClick={handleForceResetAnalysis}
+                            className="w-full mt-2 bg-red-100 hover:bg-red-200 text-red-700 border border-red-200 py-1.5 rounded text-xs font-semibold transition-all cursor-pointer"
+                          >
+                            Stalled? Force Reset & Rerun Analysis
+                          </button>
                         </div>
                       ) : (
                         <>

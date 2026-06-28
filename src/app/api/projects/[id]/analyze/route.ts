@@ -14,9 +14,26 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 });
     }
 
+    // Read optional force parameter from request body
+    let force = false;
+    try {
+      const body = await req.json();
+      force = !!body.force;
+    } catch (e) {
+      // Body might be empty
+    }
+
     // Check if project is already analyzing
-    if (["PARSING", "CLUSTERING", "ANALYZING", "GENERATING_REPORTS"].includes(project.status)) {
+    if (!force && ["PARSING", "CLUSTERING", "ANALYZING", "GENERATING_REPORTS"].includes(project.status)) {
       return NextResponse.json({ message: "Analysis already in progress", status: project.status }, { status: 200 });
+    }
+
+    if (force) {
+      // Mark any existing active jobs as FAILED to clean up the queue
+      await prisma.analysisJob.updateMany({
+        where: { projectId: id, status: { in: ["PENDING", "PARSING", "CLUSTERING", "ANALYZING", "GENERATING_REPORTS"] } },
+        data: { status: "FAILED", error: "Job force-restarted by user." }
+      });
     }
 
     // Create an AnalysisJob task directly in the queue using Prisma
