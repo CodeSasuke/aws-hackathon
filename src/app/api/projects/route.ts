@@ -16,8 +16,12 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
   const keys = Object.keys(firstRow);
 
   for (const key of keys) {
-    const value = firstRow[key];
     const keyLower = key.toLowerCase();
+    
+    // Find representative values for the column across the first few rows
+    const valuesSample = rows.slice(0, 5).map(r => r[key]).filter(v => v !== null && v !== undefined);
+    if (valuesSample.length === 0) continue;
+    const value = valuesSample[0];
 
     // Check by header name keywords or value types
     if (
@@ -43,7 +47,11 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
       keyLower.includes("text") ||
       keyLower.includes("why") ||
       keyLower.includes("what") ||
-      (typeof value === "string" && value.trim().length > 15)
+      (
+        typeof value === "string" && 
+        value.trim().length > 12 && 
+        !["yes", "no", "true", "false"].includes(value.trim().toLowerCase())
+      )
     ) {
       textCols.push(key);
     }
@@ -54,8 +62,16 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
 
 export async function GET(req: Request) {
   try {
-    // Hackathon fallback: auto-retrieve or create default organization and user
-    let user = await prisma.user.findFirst();
+    const userEmail = req.headers.get("x-user-email");
+    let user;
+    if (userEmail) {
+      user = await prisma.user.findFirst({
+        where: { email: userEmail }
+      });
+    }
+    if (!user) {
+      user = await prisma.user.findFirst();
+    }
     if (!user) {
       const org = await prisma.organization.create({ data: { name: "Default Org" } });
       user = await prisma.user.create({
@@ -92,8 +108,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
-    // Fallback default user/org
-    let user = await prisma.user.findFirst();
+    const userEmail = req.headers.get("x-user-email");
+    let user;
+    if (userEmail) {
+      user = await prisma.user.findFirst({
+        where: { email: userEmail }
+      });
+    }
+    if (!user) {
+      user = await prisma.user.findFirst();
+    }
     if (!user) {
       const org = await prisma.organization.create({ data: { name: "Default Org" } });
       user = await prisma.user.create({
@@ -132,7 +156,15 @@ export async function POST(req: Request) {
     const workbook = XLSX.read(buffer, { type: "buffer" });
     const firstSheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[firstSheetName];
-    const rawRows = XLSX.utils.sheet_to_json(sheet) as any[];
+    let rawRows = XLSX.utils.sheet_to_json(sheet) as any[];
+
+    // Filter out rows that are part of multiple headers (Unique ID must be a valid number)
+    rawRows = rawRows.filter(row => {
+      const idKey = Object.keys(row).find(k => k.toLowerCase().includes("unique id") || k.toLowerCase() === "id");
+      if (!idKey) return true;
+      const val = row[idKey];
+      return val !== null && val !== undefined && !isNaN(Number(val.toString().trim()));
+    });
 
     if (rawRows.length === 0) {
       return NextResponse.json({ error: "Uploaded survey file is empty" }, { status: 400 });
