@@ -173,12 +173,11 @@ export async function POST(req: Request) {
           Key: s3Key
         })
       );
-      
-      const chunks = [];
-      for await (const chunk of s3Response.Body as any) {
-        chunks.push(chunk);
+      if (!s3Response.Body) {
+        throw new Error("Empty S3 response body");
       }
-      buffer = Buffer.concat(chunks);
+      const byteArray = await s3Response.Body.transformToByteArray();
+      buffer = Buffer.from(byteArray);
     } catch (s3Error) {
       console.error("S3 GetObject Error:", s3Error);
       return NextResponse.json({ error: "Failed to fetch uploaded file from S3" }, { status: 404 });
