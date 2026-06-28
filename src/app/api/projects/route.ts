@@ -12,8 +12,12 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
 
   if (rows.length === 0) return { textCols, ratingCols, dateCols };
 
-  const firstRow = rows[0];
-  const keys = Object.keys(firstRow);
+  // Gather all unique keys across all rows in the dataset
+  const keysSet = new Set<string>();
+  for (const row of rows) {
+    Object.keys(row).forEach(k => keysSet.add(k));
+  }
+  const keys = Array.from(keysSet);
   const totalRowsCount = rows.length;
 
   for (const key of keys) {
@@ -55,6 +59,12 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
     const wordCounts = values.map(v => v.toString().trim().split(/\s+/).length);
     const avgWordCount = wordCounts.reduce((a, b) => a + b, 0) / values.length;
 
+    // Discard multiple choice columns based on uniqueness and unique option limits
+    const isLowCardinality = values.length > 8 ? (uniquenessRatio < 0.15 || uniqueValues.size < 8) : false;
+    if (isLowCardinality) {
+      continue; // Skip multiple-choice scales
+    }
+
     const hasFeedbackKeywords = 
       keyLower.includes("feedback") ||
       keyLower.includes("comment") ||
@@ -63,26 +73,17 @@ function autoDetectColumns(rows: any[]): { textCols: string[]; ratingCols: strin
       keyLower.includes("describe") ||
       keyLower.includes("why") ||
       keyLower.includes("what") ||
-      keyLower.includes("open") ||
-      keyLower.includes("oe_") ||
-      keyLower.includes("openended");
+      keyLower.includes("openended") ||
+      keyLower.includes("q16") ||
+      keyLower.includes("q18") ||
+      keyLower.includes("oe_");
 
-    // Standard rating scale or category keywords representing closed multiple choice selections
-    const scaleKeywords = [
-      "relevant", "appealing", "different", "believable", "expensive", "buy", "frequency",
-      "praise", "neutral", "agree", "disagree", "satisfied", "dissatisfied", "probably", "definitely",
-      "male", "female", "urban", "rural", "town", "city", "suburban", "yes", "no"
-    ];
-    const hasScaleValues = values.slice(0, 10).some(v => 
-      scaleKeywords.some(kw => v.toString().toLowerCase().includes(kw))
-    );
-
-    const isLongEnough = values.some(v => v.toString().trim().length > 12);
-    const isCardinalityHigh = totalRowsCount > 10 ? uniquenessRatio > 0.35 : uniquenessRatio >= 0.6;
+    const isLongText = values.some(v => v.toString().trim().length > 15);
+    const isDescriptive = avgWordCount > 2.0;
 
     if (
-      (isCardinalityHigh && avgWordCount > 1.8 && isLongEnough && !hasScaleValues) ||
-      (hasFeedbackKeywords && avgWordCount > 1.5)
+      hasFeedbackKeywords || 
+      (uniquenessRatio > 0.40 && isDescriptive && isLongText)
     ) {
       textCols.push(key);
     }
@@ -190,12 +191,22 @@ export async function POST(req: Request) {
     let rawRows = XLSX.utils.sheet_to_json(sheet) as any[];
 
     // Filter out rows that are part of multiple headers (Unique ID must be a valid number)
-    rawRows = rawRows.filter(row => {
-      const idKey = Object.keys(row).find(k => k.toLowerCase().includes("unique id") || k.toLowerCase() === "id");
-      if (!idKey) return true;
-      const val = row[idKey];
-      return val !== null && val !== undefined && !isNaN(Number(val.toString().trim()));
-    });
+    let idKey: string | undefined;
+    for (const row of rawRows) {
+      const found = Object.keys(row).find(k => k.toLowerCase().includes("unique id") || k.toLowerCase() === "id");
+      if (found) {
+        idKey = found;
+        break;
+      }
+    }
+    
+    if (idKey) {
+      const targetIdKey = idKey;
+      rawRows = rawRows.filter(row => {
+        const val = row[targetIdKey];
+        return val !== null && val !== undefined && !isNaN(Number(val.toString().trim()));
+      });
+    }
 
     if (rawRows.length === 0) {
       return NextResponse.json({ error: "Uploaded survey file is empty" }, { status: 400 });
