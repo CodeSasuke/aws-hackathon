@@ -3,7 +3,6 @@ type Sentiment = "POSITIVE" | "NEGATIVE" | "NEUTRAL";
 type JobStatus = "PENDING" | "PARSING" | "CLUSTERING" | "ANALYZING" | "GENERATING_REPORTS" | "COMPLETED" | "FAILED";
 
 import { prisma } from "./prisma";
-import { invokeClaude35 } from "./aws";
 
 // Types for pipeline output
 interface EnrichedOutput {
@@ -287,12 +286,37 @@ function analyzeTextLocal(
     };
   }
 
+  // Context checks for negation or competitor preference shifts (Valence Shifters)
+  const isCompetitorPreference = 
+    clean.includes("prefer other") || 
+    clean.includes("prefer another") || 
+    clean.includes("better brand") || 
+    clean.includes("better option") || 
+    clean.includes("rather have") ||
+    clean.includes("prefer my regular") ||
+    clean.includes("prefer ultra gold");
+
+  const hasNegation = 
+    clean.includes("not good") || 
+    clean.includes("not great") || 
+    clean.includes("not taste") || 
+    clean.includes("no good") || 
+    clean.includes("isn't") || 
+    clean.includes("isnt") || 
+    clean.includes("doesn't") || 
+    clean.includes("doesnt") || 
+    clean.includes("never buy");
+
   // Fallback default categorization using sentiment cues
-  const generalSentiment = clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome") || clean.includes("smooth") || clean.includes("tasty") || clean.includes("delicious") || clean.includes("perfect") || clean.includes("nice") || clean.includes("impressed")
-    ? "POSITIVE" as const 
-    : clean.includes("bad") || clean.includes("poor") || clean.includes("issue") || clean.includes("error") || clean.includes("hate") || clean.includes("slow") || clean.includes("fail")
-      ? "NEGATIVE" as const 
-      : "NEUTRAL" as const;
+  let generalSentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL" = "NEUTRAL";
+  
+  if (isCompetitorPreference || hasNegation) {
+    generalSentiment = "NEGATIVE";
+  } else if (clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome") || clean.includes("smooth") || clean.includes("tasty") || clean.includes("delicious") || clean.includes("perfect") || clean.includes("nice") || clean.includes("impressed")) {
+    generalSentiment = "POSITIVE";
+  } else if (clean.includes("bad") || clean.includes("poor") || clean.includes("issue") || clean.includes("error") || clean.includes("hate") || clean.includes("slow") || clean.includes("fail") || clean.includes("dislike")) {
+    generalSentiment = "NEGATIVE";
+  }
 
   return {
     sentiment: generalSentiment,
@@ -315,13 +339,11 @@ export async function analyzeBatchLocal(
   items: { id: string; text: string }[],
   projectMetadata?: { name: string; description: string | null; industry?: string | null }
 ): Promise<Record<string, EnrichedOutput>> {
-  console.log(`Running local NLP matching engine on ${items.length} unique cluster representatives...`);
-  
+  console.log(`Running local analytical matching engine on ${items.length} unique cluster representatives...`);
   const results: Record<string, EnrichedOutput> = {};
   for (const item of items) {
     results[item.id] = analyzeTextLocal(item.text, projectMetadata);
   }
-  
   return results;
 }
 
