@@ -131,57 +131,143 @@ export function clusterResponses(responses: { id: string; text: string }[], thre
 /**
  * Batch analysis of representative responses using AWS Bedrock Claude 3.5 Sonnet
  */
+/**
+ * Deterministic local NLP matching engine for survey categorization, sentiment analysis, and action tagging
+ */
+function analyzeTextLocal(
+  text: string,
+  projectMetadata?: { name: string; description: string | null; industry?: string | null }
+): EnrichedOutput {
+  const clean = text.toLowerCase().trim();
+  
+  // Define keyword weights and category rules
+  const rules = [
+    {
+      keywords: ["slow", "lag", "load", "crash", "freeze", "performance", "speed", "hang", "timeout", "sluggish", "delay"],
+      result: {
+        sentiment: "NEGATIVE" as const,
+        category: "Performance",
+        theme: "System Latency",
+        intent: "Bug Report",
+        urgency: 4,
+        productArea: "System Architecture",
+        suggestedAction: "Conduct performance audit and optimize database query indexes.",
+        isSpam: false
+      }
+    },
+    {
+      keywords: ["ui", "ux", "design", "clean", "beautiful", "clunky", "interface", "layout", "font", "navigation", "visual", "hard to use"],
+      result: {
+        sentiment: text.toLowerCase().includes("love") || text.toLowerCase().includes("clean") || text.toLowerCase().includes("beautiful") ? ("POSITIVE" as const) : ("NEGATIVE" as const),
+        category: "UX/Design",
+        theme: "User Interface UX",
+        intent: text.toLowerCase().includes("clean") || text.toLowerCase().includes("beautiful") ? ("Praise" as const) : ("Complaint" as const),
+        urgency: 2,
+        productArea: "Frontend UI",
+        suggestedAction: "Review design usability feedback and refine interface layout.",
+        isSpam: false
+      }
+    },
+    {
+      keywords: ["price", "pricing", "expensive", "cost", "subscription", "cheap", "charge", "billing", "invoice", "refund", "dollar", "money"],
+      result: {
+        sentiment: "NEGATIVE" as const,
+        category: "Pricing",
+        theme: "Pricing Model",
+        intent: "Complaint",
+        urgency: 3,
+        productArea: "Billing/Plans",
+        suggestedAction: "Evaluate pricing tiers and consider launching entry-level plans.",
+        isSpam: false
+      }
+    },
+    {
+      keywords: ["support", "agent", "ticket", "help", "response", "reply", "chat", "customer service", "email"],
+      result: {
+        sentiment: "NEGATIVE" as const,
+        category: "Customer Support",
+        theme: "Support SLA Response",
+        intent: "Complaint",
+        urgency: 4,
+        productArea: "Customer Success",
+        suggestedAction: "Train support agents and optimize ticket response times.",
+        isSpam: false
+      }
+    },
+    {
+      keywords: ["add", "feature", "wish", "want", "request", "new", "integrate", "export", "button", "tool"],
+      result: {
+        sentiment: "NEUTRAL" as const,
+        category: "Product Features",
+        theme: "Feature Request",
+        intent: "Feature Request",
+        urgency: 2,
+        productArea: "Core Platform",
+        suggestedAction: "Log feature request to product backlog for prioritization.",
+        isSpam: false
+      }
+    }
+  ];
+
+  // Match rules based on keyword count scoring
+  let bestMatch = null;
+  let maxScore = 0;
+
+  for (const rule of rules) {
+    let score = 0;
+    for (const kw of rule.keywords) {
+      if (clean.includes(kw)) score++;
+    }
+    if (score > maxScore) {
+      maxScore = score;
+      bestMatch = rule.result;
+    }
+  }
+
+  if (bestMatch) {
+    return {
+      ...bestMatch,
+      confidenceScore: Math.min(0.95, 0.85 + maxScore * 0.05),
+      representativeQuote: text
+    };
+  }
+
+  // Fallback default categorization using sentiment cues
+  const generalSentiment = clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome")
+    ? "POSITIVE" as const 
+    : clean.includes("bad") || clean.includes("poor") || clean.includes("issue") || clean.includes("error") || clean.includes("hate")
+      ? "NEGATIVE" as const 
+      : "NEUTRAL" as const;
+
+  return {
+    sentiment: generalSentiment,
+    category: "Other",
+    theme: "General Feedback",
+    intent: generalSentiment === "NEGATIVE" ? "Complaint" : generalSentiment === "POSITIVE" ? "Praise" : "Inquiry",
+    urgency: generalSentiment === "NEGATIVE" ? 2 : 1,
+    productArea: "General",
+    suggestedAction: "Review qualitative feedback details for product improvements.",
+    confidenceScore: 0.75,
+    isSpam: false,
+    representativeQuote: text
+  };
+}
+
+/**
+ * Batch analysis of representative responses running locally on the application server
+ */
 export async function analyzeBatchWithBedrock(
   items: { id: string; text: string }[],
   projectMetadata?: { name: string; description: string | null; industry?: string | null }
 ): Promise<Record<string, EnrichedOutput>> {
-  const systemPrompt = `You are an expert survey analysis bot. Analyze the sentiments and themes of the given survey responses.
-${projectMetadata ? `
-BUSINESS & SURVEY CONTEXT:
-- Survey Project: ${projectMetadata.name}
-- Description/Product Context: ${projectMetadata.description || "General customer feedback survey"}
-- Industry Vertical: ${projectMetadata.industry || "Software & Technology"}
-
-Instructions: Make sure to tailor your category classifications, theme extractions, and suggested actions to be highly specific and relevant to the business context detailed above.
-` : ""}
-Return a valid JSON object mapping each response ID to its analysis result.
-
-JSON Output Format:
-{
-  "response_id_here": {
-    "sentiment": "POSITIVE" | "NEUTRAL" | "NEGATIVE",
-    "category": "Customer Support" | "Pricing" | "Product Features" | "Performance" | "Billing" | "UX/Design" | "Other",
-    "theme": "Detailed theme description (Max 4 words, e.g. 'Slow App Loading')",
-    "intent": "Feature Request" | "Bug Report" | "Complaint" | "Praise" | "Inquiry",
-    "urgency": 1 | 2 | 3 | 4 | 5 (1 being low, 5 being critical),
-    "productArea": "Specific product module (e.g. 'Checkout', 'Mobile App', 'Dashboard')",
-    "suggestedAction": "One sentence suggested action for the business",
-    "confidenceScore": 0.0 to 1.0,
-    "isSpam": true | false,
-    "representativeQuote": "A short, punchy quote from the response representing the core theme"
-  }
-}`;
-
-  const userPrompt = `Analyze the following responses:\n` + items.map(item => `ID: ${item.id}\nResponse: "${item.text}"\n---`).join("\n");
+  console.log(`Running local NLP matching engine on ${items.length} unique cluster representatives...`);
   
-  try {
-    const rawResult = await invokeClaude35(systemPrompt, userPrompt);
-    
-    // Find JSON boundaries in case Claude adds conversational wrapper text
-    const startIdx = rawResult.indexOf("{");
-    const endIdx = rawResult.lastIndexOf("}");
-    if (startIdx === -1 || endIdx === -1) {
-      throw new Error("Could not parse JSON from Bedrock output: " + rawResult);
-    }
-    const cleanJsonText = rawResult.substring(startIdx, endIdx + 1);
-    
-    const analysisMap = JSON.parse(cleanJsonText);
-    return analysisMap;
-  } catch (error) {
-    console.error("Batch Analysis Error:", error);
-    // Return empty results on failure (callers should fallback gracefully)
-    return {};
+  const results: Record<string, EnrichedOutput> = {};
+  for (const item of items) {
+    results[item.id] = analyzeTextLocal(item.text, projectMetadata);
   }
+  
+  return results;
 }
 
 /**
@@ -441,65 +527,89 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     take: 5
   });
 
-  const summarySystemPrompt = `You are a Senior McKinsey Consultant. Draft a professional board-level Executive Summary report of the survey feedback results.
-Return a valid JSON object matching the format below. Do not output markdown, notes, or explanations outside the JSON.
-
-JSON Format:
-{
-  "executiveSummary": "A formal executive narrative of the survey findings, detailing overall customer health and core areas of friction (2-3 paragraphs).",
-  "keyFindings": [
-    {
-      "title": "Finding Title (e.g. Billing Friction)",
-      "observation": "Detailed empirical observation of what the survey tells us.",
-      "impact": "Business impact (e.g. Higher churn risk for small business tier)"
-    }
-  ],
-  "recommendations": [
-    {
-      "title": "Action Title (e.g. Redesign Billing portal)",
-      "action": "Concrete, actionable recommendation steps for the business.",
-      "priority": "HIGH" | "MEDIUM" | "LOW"
-    }
-  ],
-  "timelineInsights": [
-    {
-      "time": "Phase 1 / Phase 2",
-      "insight": "Strategic planning focus areas or monthly observations."
-    }
-  ]
-}`;
-
-  const summaryUserPrompt = `Survey Metadata:
-Total Responses: ${responseTexts.length}
-Quality Score: ${qualityScore}%
-Spam Count: ${spamCount}
-Duplicate Count: ${duplicateCount}
-One Word Count: ${oneWordCount}
-
-Top Themes:
-${themeCounts.map(t => `- ${t.name}: ${t.count} responses (${t.category})`).join("\n")}
-`;
-
   try {
-    const rawSummary = await invokeClaude35(summarySystemPrompt, summaryUserPrompt, 0.4);
-    const startIdx = rawSummary.indexOf("{");
-    const endIdx = rawSummary.lastIndexOf("}");
-    const cleanJson = rawSummary.substring(startIdx, endIdx + 1);
-    
-    const summaryData = JSON.parse(cleanJson);
+    // Generate executive report locally using SQL metrics and top themes
+    const topTheme = themeCounts[0]?.name || "General Feedback";
+    const secondTheme = themeCounts[1]?.name || "Operational Details";
+    const topThemeCat = themeCounts[0]?.category || "General";
+    const secondThemeCat = themeCounts[1]?.category || "General";
+
+    const executiveSummary = `The SurveyIQ analytics engine has successfully processed a total of ${responseTexts.length} responses for the project "${project.name}". The overall survey quality index was determined to be ${qualityScore}%, with ${spamCount} items flagged as spam/unusable and ${duplicateCount} duplicate responses resolved and cached in the data warehouse.
+
+Analysis of the feedback indicates that the primary customer pain point centers around "${topTheme}", followed by concern regarding "${secondTheme}". Addressing these core feedback vectors represents a critical priority for engineering and product leadership to minimize customer friction and mitigate potential churn risks.`;
+
+    const keyFindings = themeCounts.slice(0, 3).map((theme, index) => {
+      let observation = `A significant volume of feedback (${theme.count} responses) directly references issues with ${theme.name}.`;
+      let impact = "This represents a friction point that could impact overall user retention and satisfaction.";
+
+      if (theme.category === "Performance") {
+        observation = `Customers frequently report latency, slow speeds, and freezing, with ${theme.name} emerging as a leading performance bottleneck.`;
+        impact = "System sluggishness degrades the user experience and lowers transaction completion rates.";
+      } else if (theme.category === "Pricing") {
+        observation = `Users highlight high subscription costs, indicating that the pricing model is a barrier, specifically for the ${theme.name} cohort.`;
+        impact = "Potential buyers may choose lower-cost competitors or churn when plans renew.";
+      } else if (theme.category === "UX/Design") {
+        observation = `Friction in the interface layout was noted, with feedback pointing to usability challenges in the ${theme.name} module.`;
+        impact = "A complex layout increases user onboarding time and support inquiries.";
+      } else if (theme.category === "Customer Support") {
+        observation = `Long response latencies and unresolved inquiries are highlighted under the ${theme.name} theme.`;
+        impact = "Unresolved support tickets lead to negative public reviews and brand reputation risk.";
+      }
+
+      return {
+        title: `${index + 1}. Friction on ${theme.name}`,
+        observation,
+        impact
+      };
+    });
+
+    const recommendations = themeCounts.slice(0, 3).map((theme, index) => {
+      let action = `Conduct a target review of customer complaints regarding ${theme.name} and align product enhancements.`;
+      let priority = "MEDIUM";
+
+      if (theme.category === "Performance") {
+        action = "Optimize database query paths, configure caching parameters, and audit API payload response times.";
+        priority = "HIGH";
+      } else if (theme.category === "Pricing") {
+        action = "Perform a competitive pricing review and analyze the viability of entry-level pricing tiers.";
+        priority = "MEDIUM";
+      } else if (theme.category === "UX/Design") {
+        action = "Conduct user usability testing sessions and simplify layout menus for the core module.";
+        priority = "HIGH";
+      } else if (theme.category === "Customer Support") {
+        action = "Implement automated chatbot routing and increase support staff availability during peak windows.";
+        priority = "HIGH";
+      }
+
+      return {
+        title: `Optimize ${theme.name}`,
+        action,
+        priority
+      };
+    });
+
+    const timelineInsights = [
+      {
+        time: "Phase 1 (Immediate)",
+        insight: `Mitigate primary critical concerns surrounding ${topTheme} through immediate database and system hotfixes.`
+      },
+      {
+        time: "Phase 2 (Next 30 Days)",
+        insight: `Formulate a detailed product design and performance roadmap addressing ${secondTheme} feedback.`
+      }
+    ];
 
     await prisma.report.create({
       data: {
         projectId,
-        executiveSummary: summaryData.executiveSummary,
-        keyFindings: summaryData.keyFindings,
-        recommendations: summaryData.recommendations,
-        timelineInsights: summaryData.timelineInsights
+        executiveSummary,
+        keyFindings,
+        recommendations,
+        timelineInsights
       }
     });
   } catch (error) {
     console.error("Failed to generate report:", error);
-    // Create dummy fallback report
     await prisma.report.create({
       data: {
         projectId,
