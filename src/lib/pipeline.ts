@@ -19,20 +19,15 @@ interface EnrichedOutput {
   isDuplicate?: boolean;
 }
 
-/**
- * Evaluate whether the respondent's open-ended answers are of high quality or spam/low quality.
- * Returns true if the row is high quality, false if it is spam/low quality.
- */
 export function evaluateRowQuality(rowRawData: Record<string, any>, textCols: string[]): boolean {
   if (textCols.length === 0) return true;
 
-  // Prioritize Q16 open-ended questions as core indicators of quality
-  const coreCols = textCols.filter(c => c.toLowerCase().includes("q16") || c.toLowerCase().includes("comment") || c.toLowerCase().includes("feedback"));
-  const targetCols = coreCols.length > 0 ? coreCols : textCols;
+  const textFieldName = textCols[0];
+  const rawVal = rowRawData[textFieldName];
+  if (rawVal === null || rawVal === undefined) return false;
 
-  let allEmpty = true;
-  let invalidCount = 0;
-  let filledCount = 0;
+  const cleanVal = rawVal.toString().trim().toLowerCase();
+  if (cleanVal.length <= 1) return false;
 
   const lowQualityPhrases = [
     "no response", "no comment", "nothing", "n/a", "none", "nil", "na", "-", ".", "no",
@@ -41,31 +36,7 @@ export function evaluateRowQuality(rowRawData: Record<string, any>, textCols: st
     "nothing specific", "n / a", "i don't", "dislike", "no response", "none", "na", "n/a"
   ];
 
-  for (const col of targetCols) {
-    const rawVal = rowRawData[col];
-    if (rawVal !== null && rawVal !== undefined) {
-      const cleanVal = rawVal.toString().trim().toLowerCase();
-      if (cleanVal.length > 0) {
-        allEmpty = false;
-        filledCount++;
-
-        // Match exact placeholders or very short junk inputs (<= 1 char)
-        if (lowQualityPhrases.includes(cleanVal) || cleanVal.length <= 1) {
-          invalidCount++;
-        }
-      }
-    }
-  }
-
-  // Fallback to check overall textCols if core ones are blank
-  if (allEmpty && targetCols !== textCols) {
-    return evaluateRowQuality(rowRawData, textCols);
-  }
-
-  if (allEmpty) return false;
-
-  // If any core open-ended field matches low-quality non-answer keywords, flag the row as low quality (flag: 1)
-  if (invalidCount > 0) {
+  if (lowQualityPhrases.includes(cleanVal)) {
     return false;
   }
 
@@ -190,12 +161,53 @@ export function clusterResponses(responses: { id: string; text: string }[], thre
  */
 function analyzeTextLocal(
   text: string,
-  projectMetadata?: { name: string; description: string | null; industry?: string | null }
+  project?: any
 ): EnrichedOutput {
   const clean = text.toLowerCase().trim();
+
+  // Load custom categories/keywords from nlpConfig if present
+  const nlpConfig = project?.nlpConfig as any;
+  if (nlpConfig && Array.isArray(nlpConfig.categories)) {
+    for (const cat of nlpConfig.categories) {
+      if (cat.name && Array.isArray(cat.keywords)) {
+        let score = 0;
+        for (const kw of cat.keywords) {
+          if (clean.includes(kw.toLowerCase())) score++;
+        }
+        if (score > 0) {
+          const isNegative = clean.includes("bad") || clean.includes("poor") || clean.includes("harsh") || clean.includes("dislike");
+          return {
+            sentiment: isNegative ? "NEGATIVE" : "POSITIVE",
+            category: cat.name,
+            theme: `${cat.name} Custom Feedback`,
+            intent: "Feedback",
+            urgency: 2,
+            productArea: "Core Product",
+            suggestedAction: `Maintain standards for ${cat.name}.`,
+            confidenceScore: 0.9,
+            isSpam: false,
+            representativeQuote: text
+          };
+        }
+      }
+    }
+  }
   
   // Define keyword weights and category rules
   const rules = [
+    {
+      keywords: ["smooth", "taste", "tasty", "refreshing", "flavor", "delicious", "crisp", "light", "heavy", "watery", "watered down", "drinkable", "gut"],
+      result: {
+        sentiment: text.toLowerCase().includes("harsh") || text.toLowerCase().includes("bad") || text.toLowerCase().includes("watery") || text.toLowerCase().includes("watered down") ? ("NEGATIVE" as const) : ("POSITIVE" as const),
+        category: "Product Quality",
+        theme: "Taste & Refreshment",
+        intent: "Feedback",
+        urgency: 1,
+        productArea: "Product Recipe",
+        suggestedAction: "Maintain high quality standards for taste and refreshment.",
+        isSpam: false
+      }
+    },
     {
       keywords: ["slow", "lag", "load", "crash", "freeze", "performance", "speed", "hang", "timeout", "sluggish", "delay"],
       result: {
@@ -337,12 +349,12 @@ function analyzeTextLocal(
  */
 export async function analyzeBatchLocal(
   items: { id: string; text: string }[],
-  projectMetadata?: { name: string; description: string | null; industry?: string | null }
+  project?: any
 ): Promise<Record<string, EnrichedOutput>> {
   console.log(`Running local analytical matching engine on ${items.length} unique cluster representatives...`);
   const results: Record<string, EnrichedOutput> = {};
   for (const item of items) {
-    results[item.id] = analyzeTextLocal(item.text, projectMetadata);
+    results[item.id] = analyzeTextLocal(item.text, project);
   }
   return results;
 }
