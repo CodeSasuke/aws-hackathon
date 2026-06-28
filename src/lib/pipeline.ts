@@ -258,7 +258,7 @@ function analyzeTextLocal(
 /**
  * Batch analysis of representative responses running locally on the application server
  */
-export async function analyzeBatchWithBedrock(
+export async function analyzeBatchLocal(
   items: { id: string; text: string }[],
   projectMetadata?: { name: string; description: string | null; industry?: string | null }
 ): Promise<Record<string, EnrichedOutput>> {
@@ -385,7 +385,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     const chunk = representatives.slice(i, i + chunkSize);
     console.log(`Sending Bedrock batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(representatives.length / chunkSize)}...`);
     
-    const batchResults = await analyzeBatchWithBedrock(chunk, project);
+    const batchResults = await analyzeBatchLocal(chunk, project);
     
     // Propagate labels to all members in the cluster
     for (const rep of chunk) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import { prisma } from "@/lib/prisma";
-import { getLocalDeterministicLabel, clusterResponses, analyzeBatchWithBedrock } from "@/lib/pipeline";
+import { getLocalDeterministicLabel, clusterResponses, analyzeBatchLocal } from "@/lib/pipeline";
 type Sentiment = "POSITIVE" | "NEGATIVE" | "NEUTRAL";
 
 interface EnrichedResult {
@@ -84,7 +84,7 @@ export async function POST(req: Request) {
       const chunkSize = 25;
       for (let k = 0; k < representatives.length; k += chunkSize) {
         const chunk = representatives.slice(k, k + chunkSize);
-        const batchResults = await analyzeBatchWithBedrock(chunk);
+        const batchResults = await analyzeBatchLocal(chunk);
 
         // Propagate labels
         for (const rep of chunk) {
