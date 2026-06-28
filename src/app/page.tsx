@@ -329,9 +329,14 @@ export default function Home() {
 
   // Filter and search logic
   const filteredResponses = responses.filter((r) => {
-    const matchesSearch = r.text.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                          r.theme.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                          r.category.toLowerCase().includes(searchTerm.toLowerCase());
+    const textStr = String(r.text || "");
+    const themeStr = String(r.theme || "");
+    const categoryStr = String(r.category || "");
+    const searchLower = searchTerm.toLowerCase();
+
+    const matchesSearch = textStr.toLowerCase().includes(searchLower) || 
+                          themeStr.toLowerCase().includes(searchLower) ||
+                          categoryStr.toLowerCase().includes(searchLower);
     
     if (sentimentFilter === "ALL") return matchesSearch;
     return matchesSearch && r.sentiment === sentimentFilter;
