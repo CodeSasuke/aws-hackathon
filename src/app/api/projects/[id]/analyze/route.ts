@@ -52,8 +52,7 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       data: { status: "PENDING" }
     });
 
-    // Trigger Next.js background execution of the pipeline using after() to guarantee completion in serverless environments
-    after(() => {
+    const runPipeline = () => {
       runSurveyAnalysisPipeline(id).catch(async (err) => {
         console.error("Error executing background analysis pipeline:", err);
         try {
@@ -65,7 +64,15 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
           console.error("Failed to update status to FAILED:", dbErr);
         }
       });
-    });
+    };
+
+    // Use after() in Vercel production to prevent serverless function termination,
+    // otherwise execute directly in local development environments.
+    if (process.env.VERCEL || process.env.NODE_ENV === "production") {
+      after(runPipeline);
+    } else {
+      runPipeline();
+    }
 
     return NextResponse.json({
       message: "Analysis job scheduled in queue successfully",
