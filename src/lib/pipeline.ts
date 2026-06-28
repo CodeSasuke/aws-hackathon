@@ -21,6 +21,59 @@ interface EnrichedOutput {
 }
 
 /**
+ * Evaluate whether the respondent's open-ended answers are of high quality or spam/low quality.
+ * Returns true if the row is high quality, false if it is spam/low quality.
+ */
+export function evaluateRowQuality(rowRawData: Record<string, any>, textCols: string[]): boolean {
+  if (textCols.length === 0) return true;
+
+  // Prioritize Q16 open-ended questions as core indicators of quality
+  const coreCols = textCols.filter(c => c.toLowerCase().includes("q16") || c.toLowerCase().includes("comment") || c.toLowerCase().includes("feedback"));
+  const targetCols = coreCols.length > 0 ? coreCols : textCols;
+
+  let allEmpty = true;
+  let invalidCount = 0;
+  let filledCount = 0;
+
+  const lowQualityPhrases = [
+    "no response", "no comment", "nothing", "n/a", "none", "nil", "na", "-", ".", "no",
+    "not sure", "don't know", "dont know", "i don't know", "i dont know",
+    "why?", "why", "who cares", "whatever", "not really", "i have a lot to say",
+    "nothing specific", "n / a", "i don't", "dislike", "no response", "none", "na", "n/a"
+  ];
+
+  for (const col of targetCols) {
+    const rawVal = rowRawData[col];
+    if (rawVal !== null && rawVal !== undefined) {
+      const cleanVal = rawVal.toString().trim().toLowerCase();
+      if (cleanVal.length > 0) {
+        allEmpty = false;
+        filledCount++;
+
+        // Match exact placeholders or very short junk inputs (<= 1 char)
+        if (lowQualityPhrases.includes(cleanVal) || cleanVal.length <= 1) {
+          invalidCount++;
+        }
+      }
+    }
+  }
+
+  // Fallback to check overall textCols if core ones are blank
+  if (allEmpty && targetCols !== textCols) {
+    return evaluateRowQuality(rowRawData, textCols);
+  }
+
+  if (allEmpty) return false;
+
+  // If any core open-ended field matches low-quality non-answer keywords, flag the row as low quality (flag: 1)
+  if (invalidCount > 0) {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Preprocess empty, N/A, or simple deterministic responses locally without AI
  */
 export function getLocalDeterministicLabel(text: string): EnrichedOutput | null {
@@ -317,7 +370,38 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     data: { status: "CLUSTERING" }
   });
 
-  for (const item of responseTexts) {
+  for (const r of responses) {
+    const rawData = r.rawData as Record<string, any>;
+    const isQuality = evaluateRowQuality(rawData, mappings.textCols);
+    
+    // Hash is calculated from the primary open-ended column
+    const textValue = (rawData[textFieldName] || "").toString();
+    const hash = crypto.createHash("sha256").update(textValue.toLowerCase()).digest("hex");
+
+    if (!isQuality) {
+      processedResults[r.id] = {
+        sentiment: "NEUTRAL",
+        category: "General",
+        theme: "No Feedback Provided",
+        intent: "Feedback",
+        urgency: 1,
+        productArea: "General",
+        suggestedAction: "None required",
+        confidenceScore: 1.0,
+        isSpam: true,
+        representativeQuote: "Low Quality Input"
+      };
+
+      await prisma.response.update({
+        where: { id: r.id },
+        data: { responseHash: hash, isSpam: true }
+      });
+      continue;
+    }
+
+    const item = responseTexts.find(x => x.id === r.id);
+    if (!item) continue;
+
     // Check local rules
     const localLabel = getLocalDeterministicLabel(item.text);
     if (localLabel) {
@@ -326,7 +410,6 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     }
 
     // Check DB Cache for identical responses
-    const hash = crypto.createHash("sha256").update(item.text.toLowerCase()).digest("hex");
     const cached = await prisma.responseCache.findUnique({ where: { hash } });
     
     if (cached) {

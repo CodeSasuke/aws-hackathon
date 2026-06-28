@@ -318,7 +318,7 @@ export default function Home() {
             theme: r.themeId ? (data.project.themes.find((t: any) => t.id === r.themeId)?.name || "N/A") : "N/A",
             urgency: r.urgency || 0,
             action: r.suggestedAction || "N/A",
-            spam: r.isSpam ? "YES" : "NO",
+            quality: r.isSpam ? "Low Quality" : "High Quality",
             duplicate: r.isDuplicate ? "YES" : "NO"
           };
         }));
@@ -782,12 +782,17 @@ export default function Home() {
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
-                  <p className="text-xs font-semibold text-gray-500 uppercase">Data Quality Score</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase">Survey Quality Status</p>
                   <p className="text-2xl font-bold mt-1 text-blue-600">
                     {projectData?.surveyFiles?.[0]?.qualityScore || 92}%
                   </p>
-                  <p className="text-[10px] text-gray-500 mt-2">
-                    Deduplicated & Spam filtered
+                  <p className="text-[10px] font-semibold mt-2">
+                    {(() => {
+                      const score = projectData?.surveyFiles?.[0]?.qualityScore ?? 92;
+                      if (score >= 80) return <span className="text-emerald-600">High Quality (Reliable)</span>;
+                      if (score >= 60) return <span className="text-amber-600">Moderate Quality (Caution)</span>;
+                      return <span className="text-red-600">Low Quality (Unreliable)</span>;
+                    })()}
                   </p>
                 </div>
                 <div className="bg-white border border-gray-200 rounded p-5 shadow-sm">
@@ -1047,7 +1052,7 @@ export default function Home() {
                         <th className="py-3 px-4 w-[140px]">Category</th>
                         <th className="py-3 px-4 w-[200px]">Suggested Action</th>
                         <th className="py-3 px-4 w-20 text-center">Urgency</th>
-                        <th className="py-3 px-4 w-20 text-center">Spam</th>
+                        <th className="py-3 px-4 w-32 text-center">Quality Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 text-sm">
@@ -1085,7 +1090,11 @@ export default function Home() {
                               {r.action}
                             </td>
                             <td className="py-3.5 px-4 text-center font-bold text-gray-700">{r.urgency}</td>
-                            <td className="py-3.5 px-4 text-center text-xs text-gray-500 font-medium">{r.spam}</td>
+                            <td className="py-3.5 px-4 text-center text-xs font-semibold">
+                              <span className={r.quality === "High Quality" ? "text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100" : "text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"}>
+                                {r.quality}
+                              </span>
+                            </td>
                           </tr>
                         ))
                       )}
