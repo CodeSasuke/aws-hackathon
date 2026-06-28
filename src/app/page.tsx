@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import {
   BarChart,
   Bar,
@@ -159,6 +159,16 @@ export default function Home() {
   const [selectedTextCols, setSelectedTextCols] = useState<string[]>([]);
   const [tempKey, setTempKey] = useState<string>("");
 
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, []);
+
   // Business queries
   const [selectedQuery, setSelectedQuery] = useState<string>("");
   const [queryAnswer, setQueryAnswer] = useState<string>("");
@@ -167,6 +177,84 @@ export default function Home() {
   // Search & Filters inside Excel Grid
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [sentimentFilter, setSentimentFilter] = useState<string>("ALL");
+
+  const sentimentBreakdown = useMemo(() => {
+    if (!responses || responses.length === 0) {
+      return MOCK_SENTIMENT;
+    }
+    let positive = 0;
+    let neutral = 0;
+    let negative = 0;
+    
+    responses.forEach(r => {
+      if (r.sentiment === "POSITIVE") positive++;
+      else if (r.sentiment === "NEGATIVE") negative++;
+      else if (r.sentiment === "NEUTRAL") neutral++;
+    });
+
+    if (positive === 0 && neutral === 0 && negative === 0) {
+      return [
+        { name: "Positive", value: 0, color: "#10B981" },
+        { name: "Neutral", value: 0, color: "#9CA3AF" },
+        { name: "Negative", value: 0, color: "#EF4444" }
+      ];
+    }
+
+    return [
+      { name: "Positive", value: positive, color: "#10B981" },
+      { name: "Neutral", value: neutral, color: "#9CA3AF" },
+      { name: "Negative", value: negative, color: "#EF4444" }
+    ];
+  }, [responses]);
+
+  const sentimentTrend = useMemo(() => {
+    if (!responses || responses.length === 0) {
+      return MOCK_TREND;
+    }
+    
+    // Find if a date column is mapped
+    const file = projectData?.surveyFiles?.[0];
+    const mappings = file?.columnMappings as { dateCols?: string[] } | undefined;
+    const dateColName = mappings?.dateCols?.[0] || "";
+
+    const groups: Record<string, { Positive: number, Negative: number, Neutral: number }> = {};
+
+    responses.forEach(r => {
+      let dateVal: Date | null = null;
+      if (dateColName && r.rawData && r.rawData[dateColName]) {
+        const parsed = Date.parse(r.rawData[dateColName]);
+        if (!isNaN(parsed)) {
+          dateVal = new Date(parsed);
+        }
+      }
+      
+      if (!dateVal && r.createdAt) {
+        dateVal = new Date(r.createdAt);
+      }
+      
+      const monthStr = dateVal ? dateVal.toLocaleString("en-US", { month: "short" }) : "Active";
+      
+      if (!groups[monthStr]) {
+        groups[monthStr] = { Positive: 0, Negative: 0, Neutral: 0 };
+      }
+      
+      if (r.sentiment === "POSITIVE") groups[monthStr].Positive++;
+      else if (r.sentiment === "NEGATIVE") groups[monthStr].Negative++;
+      else if (r.sentiment === "NEUTRAL") groups[monthStr].Neutral++;
+    });
+
+    const data = Object.entries(groups).map(([name, counts]) => ({
+      name,
+      Positive: counts.Positive,
+      Negative: counts.Negative,
+      Neutral: counts.Neutral
+    }));
+
+    if (data.length === 0) {
+      return MOCK_TREND;
+    }
+    return data;
+  }, [responses, projectData]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -377,6 +465,65 @@ export default function Home() {
     }
   }, [selectedProjectId]);
 
+  const startPollingAnalysis = (projectId: string) => {
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
+    setUploading(true);
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/projects/${projectId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        
+        if (data.project) {
+          const status = data.project.status;
+          setAnalysisStatus(`Status: ${status}`);
+          
+          if (status === "PENDING") {
+            setAnalysisProgress(10);
+            setAnalysisStatus("Analysis job queued (Pending)...");
+          } else if (status === "PARSING") {
+            setAnalysisProgress(20);
+            setAnalysisStatus("Parsing spreadsheet columns...");
+          } else if (status === "CLUSTERING") {
+            setAnalysisProgress(40);
+            setAnalysisStatus("Clustering similar responses locally...");
+          } else if (status === "ANALYZING") {
+            setAnalysisProgress(70);
+            setAnalysisStatus("Running local semantic text classification...");
+          } else if (status === "GENERATING_REPORTS") {
+            setAnalysisProgress(90);
+            setAnalysisStatus("Generating strategic executive reports...");
+          } else if (status === "COMPLETED") {
+            setAnalysisProgress(100);
+            setAnalysisStatus("Analysis Completed!");
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+            setUploading(false);
+            loadProjectDetails(projectId);
+            setActiveTab("dashboard");
+          } else if (status === "FAILED") {
+            setAnalysisStatus("Analysis pipeline failed.");
+            if (pollingIntervalRef.current) {
+              clearInterval(pollingIntervalRef.current);
+              pollingIntervalRef.current = null;
+            }
+            setUploading(false);
+          }
+        }
+      } catch (err) {
+        console.error("Error polling analysis status:", err);
+      }
+    }, 3000);
+
+    pollingIntervalRef.current = interval;
+  };
+
   const loadProjectDetails = async (id: string) => {
     try {
       const res = await fetch(`/api/projects/${id}`);
@@ -387,6 +534,33 @@ export default function Home() {
         const file = data.project.surveyFiles?.[0];
         const mappings = file?.columnMappings as { textCols?: string[] } | undefined;
         const textColName = mappings?.textCols?.[0] || "";
+
+        // Check if project is currently running an analysis status
+        const status = data.project.status;
+        if (["PENDING", "PARSING", "CLUSTERING", "ANALYZING", "GENERATING_REPORTS"].includes(status)) {
+          if (file) {
+            const m = file.columnMappings as { textCols?: string[], ratingCols?: string[], dateCols?: string[] } | undefined;
+            if (m) {
+              setDetectedCols({
+                textCols: m.textCols || [],
+                ratingCols: m.ratingCols || [],
+                dateCols: m.dateCols || []
+              });
+              setSelectedTextCols(m.textCols || []);
+              if (data.responses && data.responses.length > 0) {
+                setAllColumns(Object.keys(data.responses[0].rawData || {}));
+              }
+            }
+          }
+          startPollingAnalysis(id);
+        } else {
+          // If not running, clear any active polling interval for this project
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+            setUploading(false);
+          }
+        }
 
         setResponses(data.responses.map((r: any) => {
           const keys = Object.keys(r.rawData || {});
@@ -401,7 +575,9 @@ export default function Home() {
             urgency: r.urgency || 0,
             action: r.suggestedAction || "N/A",
             quality: r.isSpam ? "Low Quality" : "High Quality",
-            duplicate: r.isDuplicate ? "YES" : "NO"
+            duplicate: r.isDuplicate ? "YES" : "NO",
+            rawData: r.rawData,
+            createdAt: r.createdAt
           };
         }));
         
@@ -494,40 +670,8 @@ export default function Home() {
       setAnalysisStatus("Deduplicating responses...");
       await fetch(`/api/projects/${selectedProjectId}/analyze`, { method: "POST" });
       
-      // Poll analysis progress
-      const interval = setInterval(async () => {
-        const res = await fetch(`/api/projects/${selectedProjectId}`);
-        const data = await res.json();
-        
-        if (data.project) {
-          const status = data.project.status;
-          setAnalysisStatus(`Status: ${status}`);
-          
-          if (status === "PARSING") {
-            setAnalysisProgress(20);
-          } else if (status === "CLUSTERING") {
-            setAnalysisProgress(40);
-            setAnalysisStatus("Clustering similar responses locally...");
-          } else if (status === "ANALYZING") {
-            setAnalysisProgress(70);
-            setAnalysisStatus("Running local semantic text classification...");
-          } else if (status === "GENERATING_REPORTS") {
-            setAnalysisProgress(90);
-            setAnalysisStatus("Generating strategic executive reports...");
-          } else if (status === "COMPLETED") {
-            setAnalysisProgress(100);
-            setAnalysisStatus("Analysis Completed!");
-            clearInterval(interval);
-            setUploading(false);
-            loadProjectDetails(selectedProjectId);
-            setActiveTab("dashboard");
-          } else if (status === "FAILED") {
-            setAnalysisStatus("Analysis pipeline failed.");
-            clearInterval(interval);
-            setUploading(false);
-          }
-        }
-      }, 3000);
+      // Start polling
+      startPollingAnalysis(selectedProjectId);
     } catch (err) {
       console.error(err);
       setUploading(false);
@@ -539,23 +683,24 @@ export default function Home() {
     setLoadingQuery(true);
     setQueryAnswer("");
 
-    // Simulate McKinsey response for the query (or we could call a Bedrock query API)
-    setTimeout(() => {
-      if (queryText.includes("unhappy")) {
-        setQueryAnswer(
-          "**Critical Friction Areas Identified:**\n\n1. **Checkout reliability (Performance):** Users in East US reported checkout crashes on payment. Impact: 37% of cart abandonments.\n2. **Subscription Pricing:** SMB tier feels monthly pricing is too rigid compared to usage-based competitors.\n\n*Recommendation:* Patch payment memory leaks and add a light user tier ($9/mo)."
-        );
-      } else if (queryText.includes("prioritize")) {
-        setQueryAnswer(
-          "**SurveyIQ Strategic Backlog Priority List:**\n\n1. **High Priority (Urgency 5):** Fix memory leak crash in Mobile payment checkout module.\n2. **Medium Priority (Urgency 3):** Relaunch documentation page. Users complain API examples are outdated.\n3. **Low Priority (Urgency 1):** Add Dark Mode toggle in user preferences panel."
-        );
+    try {
+      const res = await fetch(`/api/projects/${selectedProjectId}/query`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: queryText })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQueryAnswer(data.answer);
       } else {
-        setQueryAnswer(
-          "**Core Summary:** Analysis shows that positive highlights focus on Support Quality (95% CSAT), while negative sentiments center around performance reliability issues."
-        );
+        setQueryAnswer("Failed to retrieve insights from the database.");
       }
+    } catch (err) {
+      console.error(err);
+      setQueryAnswer("An error occurred while running the query.");
+    } finally {
       setLoadingQuery(false);
-    }, 1500);
+    }
   };
 
   // Filter and search logic
@@ -966,7 +1111,7 @@ export default function Home() {
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
-                            data={MOCK_SENTIMENT}
+                            data={sentimentBreakdown}
                             cx="50%"
                             cy="50%"
                             innerRadius={60}
@@ -974,7 +1119,7 @@ export default function Home() {
                             paddingAngle={5}
                             dataKey="value"
                           >
-                            {MOCK_SENTIMENT.map((entry, index) => (
+                            {sentimentBreakdown.map((entry, index) => (
                               <Cell key={`cell-${index}`} fill={entry.color} />
                             ))}
                           </Pie>
@@ -983,7 +1128,7 @@ export default function Home() {
                       </ResponsiveContainer>
                     </div>
                     <div className="w-1/2 space-y-4">
-                      {MOCK_SENTIMENT.map((s, idx) => (
+                      {sentimentBreakdown.map((s, idx) => (
                         <div key={idx} className="flex items-center justify-between border-b border-gray-100 pb-2">
                           <span className="flex items-center text-sm font-medium">
                             <span className="h-3 w-3 rounded-full mr-2" style={{ backgroundColor: s.color }}></span>
@@ -1001,7 +1146,7 @@ export default function Home() {
                   <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-6">Sentiment & Feedback Trend</h3>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={MOCK_TREND}>
+                      <LineChart data={sentimentTrend}>
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="name" />
                         <YAxis />
@@ -1137,21 +1282,47 @@ export default function Home() {
 
                     {/* Final Analysis run trigger */}
                     <div className="space-y-3">
-                      <button
-                        onClick={handleStartAnalysis}
-                        className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition-colors"
-                      >
-                        Analyze Responses
-                      </button>
-                      <button
-                        onClick={() => {
-                          setDetectedCols(null);
-                          setFile(null);
-                        }}
-                        className="w-full bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 font-semibold py-2 rounded text-sm transition-colors"
-                      >
-                        Reset / Choose Different File
-                      </button>
+                      {uploading && analysisProgress > 0 ? (
+                        <div className="w-full bg-blue-50 border border-blue-200 rounded-lg p-5 space-y-4 shadow-sm">
+                          <div className="flex justify-between items-center text-xs font-bold text-blue-800 uppercase tracking-wider">
+                            <span className="flex items-center">
+                              <span className="flex h-2.5 w-2.5 relative mr-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-600"></span>
+                              </span>
+                              {analysisStatus || "Analyzing..."}
+                            </span>
+                            <span className="font-mono bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px]">{analysisProgress}%</span>
+                          </div>
+                          <div className="w-full bg-blue-100 rounded-full h-2.5 overflow-hidden">
+                            <div 
+                              className="bg-blue-600 h-2.5 rounded-full transition-all duration-500 ease-out shadow-sm" 
+                              style={{ width: `${analysisProgress}%` }}
+                            ></div>
+                          </div>
+                          <p className="text-[10px] text-blue-600 font-medium">Please do not navigate away or refresh the page until the analysis is fully completed.</p>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            onClick={handleStartAnalysis}
+                            disabled={uploading}
+                            className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-2.5 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {uploading ? "Analyzing Responses..." : "Analyze Responses"}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setDetectedCols(null);
+                              setFile(null);
+                            }}
+                            disabled={uploading}
+                            className="w-full bg-white hover:bg-gray-50 text-gray-600 border border-gray-300 font-semibold py-2 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Reset / Choose Different File
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1266,117 +1437,88 @@ export default function Home() {
           {/* TAB D: EXECUTIVE REPORTS VIEW */}
           {activeTab === "report" && (
             <div className="max-w-4xl mx-auto space-y-8 bg-white border border-gray-200 rounded p-8 shadow-sm">
-              {/* Header and Exporters */}
-              <div className="flex items-start justify-between border-b border-gray-200 pb-6">
-                <div>
-                  <h2 className="text-xl font-bold text-gray-900">{projectData?.name || "Customer Feedback Report"}</h2>
-                  <p className="text-sm text-gray-500 mt-1">Strategic Board Presentation Summary</p>
-                </div>
-                <div className="flex items-center space-x-3">
+              {!projectData?.reports || projectData.reports.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-12 bg-gray-50 border border-dashed border-gray-250 rounded-xl text-center w-full">
+                  <div className="h-14 w-14 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                    <FileText className="h-7 w-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-gray-800">No Report Generated Yet</h3>
+                  <p className="text-xs text-gray-500 max-w-sm mt-2 leading-relaxed">
+                    Please upload a spreadsheet and run the analysis pipeline from the <strong>Upload Data</strong> tab to generate dynamic McKinsey-style executive reports.
+                  </p>
                   <button
-                    onClick={() => window.open(`/api/projects/${selectedProjectId}/export/pdf`, "_blank")}
-                    className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold transition-colors"
+                    onClick={() => setActiveTab("upload")}
+                    className="mt-5 bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-2 rounded text-xs transition-all shadow-sm cursor-pointer"
                   >
-                    <Download className="h-4 w-4 mr-2" /> Download Board PDF
+                    Go to Upload Data
                   </button>
                 </div>
-              </div>
+              ) : (
+                <>
+                  {/* Header and Exporters */}
+                  <div className="flex items-start justify-between border-b border-gray-200 pb-6">
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">{projectData?.name || "Customer Feedback Report"}</h2>
+                      <p className="text-sm text-gray-500 mt-1">Strategic Board Presentation Summary</p>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => window.open(`/api/projects/${selectedProjectId}/export/pdf`, "_blank")}
+                        className="flex items-center bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm font-semibold transition-colors"
+                      >
+                        <Download className="h-4 w-4 mr-2" /> Download Board PDF
+                      </button>
+                    </div>
+                  </div>
 
-              {/* 1. Executive Summary Text */}
-              <div className="space-y-3">
-                <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">1. Executive Narrative</h3>
-                <p className="text-gray-700 leading-relaxed text-justify text-sm">
-                  {projectData?.reports?.[0]?.executiveSummary ||
-                    "This report outlines key observations aggregated across customer survey touchpoints. Overall sentiments show that users highly value customer support quality and response speed. However, friction during checkout and rigid subscription pricing pose high customer churn risks."}
-                </p>
-              </div>
+                  {/* 1. Executive Summary Text */}
+                  <div className="space-y-3">
+                    <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">1. Executive Narrative</h3>
+                    <p className="text-gray-700 leading-relaxed text-justify text-sm">
+                      {projectData.reports[0].executiveSummary}
+                    </p>
+                  </div>
 
-              {/* 2. Key Findings Boxes */}
-              <div className="space-y-4">
-                <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">2. Core Observations & Impact</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  {(projectData?.reports?.[0]?.keyFindings as any[])?.length > 0 ? (
-                    (projectData?.reports?.[0]?.keyFindings as any[]).map((finding, idx) => (
-                      <div key={idx} className="border border-gray-200 bg-gray-50 p-5 rounded">
-                        <h4 className="font-bold text-blue-700 text-sm">Finding {idx + 1}: {finding.title}</h4>
-                        <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">
-                          <strong>Observation:</strong> {finding.observation}
-                        </p>
-                        <p className="text-xs text-gray-800 mt-1 font-semibold">
-                          <strong>Business Impact:</strong> {finding.impact}
-                        </p>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="border border-gray-200 bg-gray-50 p-5 rounded">
-                        <h4 className="font-bold text-blue-700 text-sm">Finding 1: Checkout Instability</h4>
-                        <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">
-                          <strong>Observation:</strong> Multiple clients reported UI lockups and freezing during checkout.
-                        </p>
-                        <p className="text-xs text-gray-800 mt-1 font-semibold">
-                          <strong>Business Impact:</strong> Leads to cart abandonment and lower subscription conversions.
-                        </p>
-                      </div>
-                      <div className="border border-gray-200 bg-gray-50 p-5 rounded">
-                        <h4 className="font-bold text-blue-700 text-sm">Finding 2: Pricing Flexibility</h4>
-                        <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">
-                          <strong>Observation:</strong> Small businesses find the rigid tiered pricing packages expensive.
-                        </p>
-                        <p className="text-xs text-gray-800 mt-1 font-semibold">
-                          <strong>Business Impact:</strong> Restricts adoption in the startup / independent business segments.
-                        </p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+                  {/* 2. Key Findings Boxes */}
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">2. Core Observations & Impact</h3>
+                    <div className="grid grid-cols-1 gap-4">
+                      {(projectData.reports[0].keyFindings as any[]).map((finding, idx) => (
+                        <div key={idx} className="border border-gray-200 bg-gray-50 p-5 rounded">
+                          <h4 className="font-bold text-blue-700 text-sm">Finding {idx + 1}: {finding.title}</h4>
+                          <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">
+                            <strong>Observation:</strong> {finding.observation}
+                          </p>
+                          <p className="text-xs text-gray-800 mt-1 font-semibold">
+                            <strong>Business Impact:</strong> {finding.impact}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
-              {/* 3. Strategy Recommendations */}
-              <div className="space-y-4">
-                <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">3. Strategic Recommendations</h3>
-                <div className="space-y-3">
-                  {(projectData?.reports?.[0]?.recommendations as any[])?.length > 0 ? (
-                    (projectData?.reports?.[0]?.recommendations as any[]).map((rec, idx) => (
-                      <div key={idx} className="flex border border-gray-150 rounded overflow-hidden">
-                        <div className={`w-1.5 ${rec.priority === "HIGH" ? "bg-red-500" : rec.priority === "MEDIUM" ? "bg-amber-500" : "bg-gray-400"}`}></div>
-                        <div className="p-4 bg-gray-50 flex-1 text-xs">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-gray-800">{idx + 1}. {rec.title}</span>
-                            <span className={`px-2 py-0.5 rounded-[3px] text-[9px] font-bold ${
-                              rec.priority === "HIGH" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
-                            }`}>{rec.priority} PRIORITY</span>
+                  {/* 3. Strategy Recommendations */}
+                  <div className="space-y-4">
+                    <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">3. Strategic Recommendations</h3>
+                    <div className="space-y-3">
+                      {(projectData.reports[0].recommendations as any[]).map((rec, idx) => (
+                        <div key={idx} className="flex border border-gray-150 rounded overflow-hidden">
+                          <div className={`w-1.5 ${rec.priority === "HIGH" ? "bg-red-500" : rec.priority === "MEDIUM" ? "bg-amber-500" : "bg-gray-400"}`}></div>
+                          <div className="p-4 bg-gray-50 flex-1 text-xs">
+                            <div className="flex justify-between items-center mb-1">
+                              <span className="font-bold text-gray-800">{idx + 1}. {rec.title}</span>
+                              <span className={`px-2 py-0.5 rounded-[3px] text-[9px] font-bold ${
+                                rec.priority === "HIGH" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
+                              }`}>{rec.priority} PRIORITY</span>
+                            </div>
+                            <p className="text-gray-600 mt-1">{rec.action}</p>
                           </div>
-                          <p className="text-gray-600 mt-1">{rec.action}</p>
                         </div>
-                      </div>
-                    ))
-                  ) : (
-                    <>
-                      <div className="flex border border-gray-150 rounded overflow-hidden">
-                        <div className="w-1.5 bg-red-500"></div>
-                        <div className="p-4 bg-gray-50 flex-1 text-xs">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-gray-800">1. Patch Mobile Payment Flow</span>
-                            <span className="px-2 py-0.5 rounded-[3px] text-[9px] font-bold bg-red-50 text-red-700">HIGH PRIORITY</span>
-                          </div>
-                          <p className="text-gray-600 mt-1">Refactor checkout screen and resolve memory leak crashes.</p>
-                        </div>
-                      </div>
-                      <div className="flex border border-gray-150 rounded overflow-hidden">
-                        <div className="w-1.5 bg-amber-500"></div>
-                        <div className="p-4 bg-gray-50 flex-1 text-xs">
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="font-bold text-gray-800">2. Launch SMB Subscription Tier</span>
-                            <span className="px-2 py-0.5 rounded-[3px] text-[9px] font-bold bg-amber-50 text-amber-700">MEDIUM PRIORITY</span>
-                          </div>
-                          <p className="text-gray-600 mt-1">Design a startup plan at $9/mo to lower entry barriers.</p>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 

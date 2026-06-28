@@ -35,6 +35,19 @@ export async function POST(req: Request, { params }: { params: Promise<any> }) {
       data: { status: "PENDING" }
     });
 
+    // Trigger Next.js background execution of the pipeline
+    runSurveyAnalysisPipeline(id).catch(async (err) => {
+      console.error("Error executing background analysis pipeline:", err);
+      try {
+        await prisma.project.update({
+          where: { id },
+          data: { status: "FAILED" }
+        });
+      } catch (dbErr) {
+        console.error("Failed to update status to FAILED:", dbErr);
+      }
+    });
+
     return NextResponse.json({
       message: "Analysis job scheduled in queue successfully",
       status: "PENDING"

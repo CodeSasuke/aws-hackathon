@@ -356,382 +356,417 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
   });
   if (!project) throw new Error("Project not found: " + projectId);
 
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { status: "PARSING" }
+  const activeJob = await prisma.analysisJob.findFirst({
+    where: { projectId, status: { in: ["PENDING", "ANALYZING"] } },
+    orderBy: { createdAt: "desc" }
   });
 
-  const responses = await prisma.response.findMany({
-    where: { projectId },
-    select: { id: true, rowIndex: true, rawData: true }
-  });
-
-  // Extract open-ended text fields
-  const file = await prisma.surveyFile.findFirst({ where: { projectId } });
-  if (!file) throw new Error("No survey file mapping found for project: " + projectId);
-  
-  const mappings = file.columnMappings as { textCols: string[] };
-  const textFieldName = mappings.textCols[0]; // Primary open ended column to analyze
-
-  const responseTexts = responses.map(r => {
-    const data = r.rawData as Record<string, any>;
-    return {
-      id: r.id,
-      text: (data[textFieldName] || "").toString().trim()
-    };
-  });
-
-  console.log(`Processing ${responseTexts.length} responses for project ${projectId}...`);
-
-  // Step 1: Rule-based preprocessing and deduplication local hashing
-  const pendingAnalysis: { id: string; text: string }[] = [];
-  const processedResults: Record<string, EnrichedOutput> = {};
-
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { status: "CLUSTERING" }
-  });
-
-  for (const r of responses) {
-    const rawData = r.rawData as Record<string, any>;
-    const isQuality = evaluateRowQuality(rawData, mappings.textCols);
-    
-    // Hash is calculated from the primary open-ended column
-    const textValue = (rawData[textFieldName] || "").toString();
-    const hash = crypto.createHash("sha256").update(textValue.toLowerCase()).digest("hex");
-
-    if (!isQuality) {
-      processedResults[r.id] = {
-        sentiment: "NEUTRAL",
-        category: "General",
-        theme: "No Feedback Provided",
-        intent: "Feedback",
-        urgency: 1,
-        productArea: "General",
-        suggestedAction: "None required",
-        confidenceScore: 1.0,
-        isSpam: true,
-        representativeQuote: "Low Quality Input"
-      };
-
-      await prisma.response.update({
-        where: { id: r.id },
-        data: { responseHash: hash, isSpam: true }
-      });
-      continue;
-    }
-
-    const item = responseTexts.find(x => x.id === r.id);
-    if (!item) continue;
-
-    // Check local rules
-    const localLabel = getLocalDeterministicLabel(item.text);
-    if (localLabel) {
-      processedResults[item.id] = localLabel;
-      continue;
-    }
-
-    // Check DB Cache for identical responses
-    const cached = await prisma.responseCache.findUnique({ where: { hash } });
-    
-    if (cached) {
-      processedResults[item.id] = {
-        sentiment: cached.sentiment,
-        category: cached.category || "General",
-        theme: cached.themeName || "General Feedback",
-        intent: cached.intent || "Feedback",
-        urgency: cached.urgency || 1,
-        productArea: cached.productArea || "General",
-        suggestedAction: cached.suggestedAction || "None required",
-        confidenceScore: 1.0,
-        isSpam: false,
-        representativeQuote: cached.text
-      };
-      
-      // Update Response table directly to mark as duplicate
-      await prisma.response.update({
-        where: { id: item.id },
-        data: { responseHash: hash, isDuplicate: true }
-      });
-      continue;
-    }
-
-    // Otherwise, queue for clustering
-    pendingAnalysis.push(item);
-    await prisma.response.update({
-      where: { id: item.id },
-      data: { responseHash: hash }
-    });
-  }
-
-  console.log(`Locally resolved ${Object.keys(processedResults).length} responses. ${pendingAnalysis.length} unique items remaining for clustering.`);
-
-  // Step 2: Clustering Jaccard Similarity
-  const clusters = clusterResponses(pendingAnalysis, 0.55);
-  console.log(`Clustered remaining responses into ${clusters.size} groups.`);
-
-  // Prepare representative responses for Bedrock
-  const representatives: { id: string; text: string }[] = [];
-  for (const repId of clusters.keys()) {
-    const textObj = pendingAnalysis.find(x => x.id === repId);
-    if (textObj) {
-      representatives.push(textObj);
-    }
-  }
-
-  // Step 3: Bedrock batch calls (in chunks of 25 to avoid token limits)
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { status: "ANALYZING" }
-  });
-
-  const chunkSize = 25;
-  for (let i = 0; i < representatives.length; i += chunkSize) {
-    const chunk = representatives.slice(i, i + chunkSize);
-    console.log(`Sending Bedrock batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(representatives.length / chunkSize)}...`);
-    
-    const batchResults = await analyzeBatchLocal(chunk, project);
-    
-    // Propagate labels to all members in the cluster
-    for (const rep of chunk) {
-      const repResult = batchResults[rep.id];
-      if (repResult) {
-        // Apply to representative
-        processedResults[rep.id] = repResult;
-        
-        // Propagate to other members in cluster
-        const clusterMembers = clusters.get(rep.id) || [];
-        for (const memberId of clusterMembers) {
-          if (memberId !== rep.id) {
-            processedResults[memberId] = {
-              ...repResult,
-              isDuplicate: true // Flag as duplicate since it got its label from cluster propagation
-            };
-          }
-        }
-
-        // Cache the representative result globally in Database
-        const hash = crypto.createHash("sha256").update(rep.text.toLowerCase()).digest("hex");
-        await prisma.responseCache.upsert({
-          where: { hash },
-          update: {},
-          create: {
-            hash,
-            text: rep.text,
-            sentiment: repResult.sentiment,
-            category: repResult.category,
-            themeName: repResult.theme,
-            intent: repResult.intent,
-            urgency: repResult.urgency,
-            productArea: repResult.productArea,
-            suggestedAction: repResult.suggestedAction
-          }
-        });
-      }
-    }
-  }
-
-  // Step 4: Write all results to the Database & create Themes
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { status: "GENERATING_REPORTS" }
-  });
-
-  console.log("Writing enriched results to Database...");
-  
-  // Track and create Themes
-  const uniqueThemes = new Map<string, { category: string }>();
-  for (const result of Object.values(processedResults)) {
-    if (result.theme) {
-      uniqueThemes.set(result.theme, { category: result.category });
-    }
-  }
-
-  // Create Themes in DB
-  const themeDbMap = new Map<string, string>(); // name -> id
-  for (const [themeName, data] of uniqueThemes.entries()) {
-    const dbTheme = await prisma.theme.upsert({
-      where: { projectId_name: { projectId, name: themeName } },
-      update: {},
-      create: {
-        projectId,
-        name: themeName,
-        category: data.category,
-        count: 0
-      }
-    });
-    themeDbMap.set(themeName, dbTheme.id);
-  }
-
-  // Update Responses in Database
-  let spamCount = 0;
-  let duplicateCount = 0;
-  let oneWordCount = 0;
-
-  for (const r of responses) {
-    const result = processedResults[r.id];
-    if (result) {
-      const themeId = themeDbMap.get(result.theme) || null;
-      const isSpam = result.isSpam;
-      const isDuplicate = result.isSpam ? false : (result as any).isDuplicate || false;
-      const rawText = ((r.rawData as Record<string, any>)[textFieldName] || "").toString();
-      const isOneWord = rawText.trim().split(/\s+/).length === 1;
-
-      if (isSpam) spamCount++;
-      if (isDuplicate) duplicateCount++;
-      if (isOneWord) oneWordCount++;
-
-      await prisma.response.update({
-        where: { id: r.id },
+  const updateJobProgress = async (progress: number, status: JobStatus, errorMsg?: string) => {
+    if (!activeJob) return;
+    try {
+      await prisma.analysisJob.update({
+        where: { id: activeJob.id },
         data: {
-          sentiment: result.sentiment,
-          themeId,
-          category: result.category,
-          intent: result.intent,
-          urgency: result.urgency,
-          productArea: result.productArea,
-          suggestedAction: result.suggestedAction,
-          confidenceScore: result.confidenceScore,
-          isSpam,
-          isDuplicate,
-          representativeQuote: result.representativeQuote
+          status,
+          progress,
+          ...(status === "COMPLETED" || status === "FAILED" ? { completedAt: new Date() } : {}),
+          ...(status === "FAILED" ? { error: errorMsg } : {})
         }
       });
-
-      // Update theme counter
-      if (themeId && !isSpam) {
-        await prisma.theme.update({
-          where: { id: themeId },
-          data: { count: { increment: 1 } }
-        });
-      }
+    } catch (err) {
+      console.error("Failed to update AnalysisJob progress:", err);
     }
-  }
-
-  // Update file metrics
-  const qualityScore = Math.max(
-    0,
-    Math.round(
-      ((responseTexts.length - (spamCount + duplicateCount + oneWordCount)) / responseTexts.length) * 100
-    )
-  );
-
-  await prisma.surveyFile.update({
-    where: { id: file.id },
-    data: {
-      spamCount,
-      duplicateCount,
-      oneWordCount,
-      qualityScore
-    }
-  });
-
-  // Step 5: Generate McKinsey-Style Executive Report Summary via Bedrock
-  console.log("Generating Executive Insights Summary...");
-  const themeCounts = await prisma.theme.findMany({
-    where: { projectId },
-    orderBy: { count: "desc" },
-    take: 5
-  });
+  };
 
   try {
-    // Generate executive report locally using SQL metrics and top themes
-    const topTheme = themeCounts[0]?.name || "General Feedback";
-    const secondTheme = themeCounts[1]?.name || "Operational Details";
-    const topThemeCat = themeCounts[0]?.category || "General";
-    const secondThemeCat = themeCounts[1]?.category || "General";
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "PARSING" }
+    });
+    await updateJobProgress(20, "PARSING");
 
-    const executiveSummary = `The SurveyIQ analytics engine has successfully processed a total of ${responseTexts.length} responses for the project "${project.name}". The overall survey quality index was determined to be ${qualityScore}%, with ${spamCount} items flagged as spam/unusable and ${duplicateCount} duplicate responses resolved and cached in the data warehouse.
+    const responses = await prisma.response.findMany({
+      where: { projectId },
+      select: { id: true, rowIndex: true, rawData: true }
+    });
+
+    // Extract open-ended text fields
+    const file = await prisma.surveyFile.findFirst({ where: { projectId } });
+    if (!file) throw new Error("No survey file mapping found for project: " + projectId);
+    
+    const mappings = file.columnMappings as { textCols: string[] };
+    const textFieldName = mappings.textCols[0]; // Primary open ended column to analyze
+
+    const responseTexts = responses.map(r => {
+      const data = r.rawData as Record<string, any>;
+      return {
+        id: r.id,
+        text: (data[textFieldName] || "").toString().trim()
+      };
+    });
+
+    console.log(`Processing ${responseTexts.length} responses for project ${projectId}...`);
+
+    // Step 1: Rule-based preprocessing and deduplication local hashing
+    const pendingAnalysis: { id: string; text: string }[] = [];
+    const processedResults: Record<string, EnrichedOutput> = {};
+
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "CLUSTERING" }
+    });
+    await updateJobProgress(40, "CLUSTERING");
+
+    for (const r of responses) {
+      const rawData = r.rawData as Record<string, any>;
+      const isQuality = evaluateRowQuality(rawData, mappings.textCols);
+      
+      // Hash is calculated from the primary open-ended column
+      const textValue = (rawData[textFieldName] || "").toString();
+      const hash = crypto.createHash("sha256").update(textValue.toLowerCase()).digest("hex");
+
+      if (!isQuality) {
+        processedResults[r.id] = {
+          sentiment: "NEUTRAL",
+          category: "General",
+          theme: "No Feedback Provided",
+          intent: "Feedback",
+          urgency: 1,
+          productArea: "General",
+          suggestedAction: "None required",
+          confidenceScore: 1.0,
+          isSpam: true,
+          representativeQuote: "Low Quality Input"
+        };
+
+        await prisma.response.update({
+          where: { id: r.id },
+          data: { responseHash: hash, isSpam: true }
+        });
+        continue;
+      }
+
+      const item = responseTexts.find(x => x.id === r.id);
+      if (!item) continue;
+
+      // Check local rules
+      const localLabel = getLocalDeterministicLabel(item.text);
+      if (localLabel) {
+        processedResults[item.id] = localLabel;
+        continue;
+      }
+
+      // Check DB Cache for identical responses
+      const cached = await prisma.responseCache.findUnique({ where: { hash } });
+      
+      if (cached) {
+        processedResults[item.id] = {
+          sentiment: cached.sentiment,
+          category: cached.category || "General",
+          theme: cached.themeName || "General Feedback",
+          intent: cached.intent || "Feedback",
+          urgency: cached.urgency || 1,
+          productArea: cached.productArea || "General",
+          suggestedAction: cached.suggestedAction || "None required",
+          confidenceScore: 1.0,
+          isSpam: false,
+          representativeQuote: cached.text
+        };
+        
+        // Update Response table directly to mark as duplicate
+        await prisma.response.update({
+          where: { id: item.id },
+          data: { responseHash: hash, isDuplicate: true }
+        });
+        continue;
+      }
+
+      // Otherwise, queue for clustering
+      pendingAnalysis.push(item);
+      await prisma.response.update({
+        where: { id: item.id },
+        data: { responseHash: hash }
+      });
+    }
+
+    console.log(`Locally resolved ${Object.keys(processedResults).length} responses. ${pendingAnalysis.length} unique items remaining for clustering.`);
+
+    // Step 2: Clustering Jaccard Similarity
+    const clusters = clusterResponses(pendingAnalysis, 0.55);
+    console.log(`Clustered remaining responses into ${clusters.size} groups.`);
+
+    // Prepare representative responses for Bedrock
+    const representatives: { id: string; text: string }[] = [];
+    for (const repId of clusters.keys()) {
+      const textObj = pendingAnalysis.find(x => x.id === repId);
+      if (textObj) {
+        representatives.push(textObj);
+      }
+    }
+
+    // Step 3: Bedrock batch calls (in chunks of 25 to avoid token limits)
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "ANALYZING" }
+    });
+    await updateJobProgress(70, "ANALYZING");
+
+    const chunkSize = 25;
+    for (let i = 0; i < representatives.length; i += chunkSize) {
+      const chunk = representatives.slice(i, i + chunkSize);
+      console.log(`Sending Bedrock batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(representatives.length / chunkSize)}...`);
+      
+      const batchResults = await analyzeBatchLocal(chunk, project);
+      
+      // Propagate labels to all members in the cluster
+      for (const rep of chunk) {
+        const repResult = batchResults[rep.id];
+        if (repResult) {
+          // Apply to representative
+          processedResults[rep.id] = repResult;
+          
+          // Propagate to other members in cluster
+          const clusterMembers = clusters.get(rep.id) || [];
+          for (const memberId of clusterMembers) {
+            if (memberId !== rep.id) {
+              processedResults[memberId] = {
+                ...repResult,
+                isDuplicate: true // Flag as duplicate since it got its label from cluster propagation
+              };
+            }
+          }
+
+          // Cache the representative result globally in Database
+          const hash = crypto.createHash("sha256").update(rep.text.toLowerCase()).digest("hex");
+          await prisma.responseCache.upsert({
+            where: { hash },
+            update: {},
+            create: {
+              hash,
+              text: rep.text,
+              sentiment: repResult.sentiment,
+              category: repResult.category,
+              themeName: repResult.theme,
+              intent: repResult.intent,
+              urgency: repResult.urgency,
+              productArea: repResult.productArea,
+              suggestedAction: repResult.suggestedAction
+            }
+          });
+        }
+      }
+    }
+
+    // Step 4: Write all results to the Database & create Themes
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "GENERATING_REPORTS" }
+    });
+    await updateJobProgress(90, "GENERATING_REPORTS");
+
+    console.log("Writing enriched results to Database...");
+    
+    // Track and create Themes
+    const uniqueThemes = new Map<string, { category: string }>();
+    for (const result of Object.values(processedResults)) {
+      if (result.theme) {
+        uniqueThemes.set(result.theme, { category: result.category });
+      }
+    }
+
+    // Create Themes in DB
+    const themeDbMap = new Map<string, string>(); // name -> id
+    for (const [themeName, data] of uniqueThemes.entries()) {
+      const dbTheme = await prisma.theme.upsert({
+        where: { projectId_name: { projectId, name: themeName } },
+        update: {},
+        create: {
+          projectId,
+          name: themeName,
+          category: data.category,
+          count: 0
+        }
+      });
+      themeDbMap.set(themeName, dbTheme.id);
+    }
+
+    // Update Responses in Database
+    let spamCount = 0;
+    let duplicateCount = 0;
+    let oneWordCount = 0;
+
+    for (const r of responses) {
+      const result = processedResults[r.id];
+      if (result) {
+        const themeId = themeDbMap.get(result.theme) || null;
+        const isSpam = result.isSpam;
+        const isDuplicate = result.isSpam ? false : (result as any).isDuplicate || false;
+        const rawText = ((r.rawData as Record<string, any>)[textFieldName] || "").toString();
+        const isOneWord = rawText.trim().split(/\s+/).length === 1;
+
+        if (isSpam) spamCount++;
+        if (isDuplicate) duplicateCount++;
+        if (isOneWord) oneWordCount++;
+
+        await prisma.response.update({
+          where: { id: r.id },
+          data: {
+            sentiment: result.sentiment,
+            themeId,
+            category: result.category,
+            intent: result.intent,
+            urgency: result.urgency,
+            productArea: result.productArea,
+            suggestedAction: result.suggestedAction,
+            confidenceScore: result.confidenceScore,
+            isSpam,
+            isDuplicate,
+            representativeQuote: result.representativeQuote
+          }
+        });
+
+        // Update theme counter
+        if (themeId && !isSpam) {
+          await prisma.theme.update({
+            where: { id: themeId },
+            data: { count: { increment: 1 } }
+          });
+        }
+      }
+    }
+
+    // Update file metrics
+    const qualityScore = Math.max(
+      0,
+      Math.round(
+        ((responseTexts.length - (spamCount + duplicateCount + oneWordCount)) / responseTexts.length) * 100
+      )
+    );
+
+    await prisma.surveyFile.update({
+      where: { id: file.id },
+      data: {
+        spamCount,
+        duplicateCount,
+        oneWordCount,
+        qualityScore
+      }
+    });
+
+    // Step 5: Generate McKinsey-Style Executive Report Summary via Bedrock
+    console.log("Generating Executive Insights Summary...");
+    const themeCounts = await prisma.theme.findMany({
+      where: { projectId },
+      orderBy: { count: "desc" },
+      take: 5
+    });
+
+    try {
+      // Generate executive report locally using SQL metrics and top themes
+      const topTheme = themeCounts[0]?.name || "General Feedback";
+      const secondTheme = themeCounts[1]?.name || "Operational Details";
+
+      const executiveSummary = `The SurveyIQ analytics engine has successfully processed a total of ${responseTexts.length} responses for the project "${project.name}". The overall survey quality index was determined to be ${qualityScore}%, with ${spamCount} items flagged as spam/unusable and ${duplicateCount} duplicate responses resolved and cached in the data warehouse.
 
 Analysis of the feedback indicates that the primary customer pain point centers around "${topTheme}", followed by concern regarding "${secondTheme}". Addressing these core feedback vectors represents a critical priority for engineering and product leadership to minimize customer friction and mitigate potential churn risks.`;
 
-    const keyFindings = themeCounts.slice(0, 3).map((theme, index) => {
-      let observation = `A significant volume of feedback (${theme.count} responses) directly references issues with ${theme.name}.`;
-      let impact = "This represents a friction point that could impact overall user retention and satisfaction.";
+      const keyFindings = themeCounts.slice(0, 3).map((theme, index) => {
+        let observation = `A significant volume of feedback (${theme.count} responses) directly references issues with ${theme.name}.`;
+        let impact = "This represents a friction point that could impact overall user retention and satisfaction.";
 
-      if (theme.category === "Performance") {
-        observation = `Customers frequently report latency, slow speeds, and freezing, with ${theme.name} emerging as a leading performance bottleneck.`;
-        impact = "System sluggishness degrades the user experience and lowers transaction completion rates.";
-      } else if (theme.category === "Pricing") {
-        observation = `Users highlight high subscription costs, indicating that the pricing model is a barrier, specifically for the ${theme.name} cohort.`;
-        impact = "Potential buyers may choose lower-cost competitors or churn when plans renew.";
-      } else if (theme.category === "UX/Design") {
-        observation = `Friction in the interface layout was noted, with feedback pointing to usability challenges in the ${theme.name} module.`;
-        impact = "A complex layout increases user onboarding time and support inquiries.";
-      } else if (theme.category === "Customer Support") {
-        observation = `Long response latencies and unresolved inquiries are highlighted under the ${theme.name} theme.`;
-        impact = "Unresolved support tickets lead to negative public reviews and brand reputation risk.";
-      }
+        if (theme.category === "Performance") {
+          observation = `Customers frequently report latency, slow speeds, and freezing, with ${theme.name} emerging as a leading performance bottleneck.`;
+          impact = "System sluggishness degrades the user experience and lowers transaction completion rates.";
+        } else if (theme.category === "Pricing") {
+          observation = `Users highlight high subscription costs, indicating that the pricing model is a barrier, specifically for the ${theme.name} cohort.`;
+          impact = "Potential buyers may choose lower-cost competitors or churn when plans renew.";
+        } else if (theme.category === "UX/Design") {
+          observation = `Friction in the interface layout was noted, with feedback pointing to usability challenges in the ${theme.name} module.`;
+          impact = "A complex layout increases user onboarding time and support inquiries.";
+        } else if (theme.category === "Customer Support") {
+          observation = `Long response latencies and unresolved inquiries are highlighted under the ${theme.name} theme.`;
+          impact = "Unresolved support tickets lead to negative public reviews and brand reputation risk.";
+        }
 
-      return {
-        title: `${index + 1}. Friction on ${theme.name}`,
-        observation,
-        impact
-      };
+        return {
+          title: `${index + 1}. Friction on ${theme.name}`,
+          observation,
+          impact
+        };
+      });
+
+      const recommendations = themeCounts.slice(0, 3).map((theme, index) => {
+        let action = `Conduct a target review of customer complaints regarding ${theme.name} and align product enhancements.`;
+        let priority = "MEDIUM";
+
+        if (theme.category === "Performance") {
+          action = "Optimize database query paths, configure caching parameters, and audit API payload response times.";
+          priority = "HIGH";
+        } else if (theme.category === "Pricing") {
+          action = "Perform a competitive pricing review and analyze the viability of entry-level pricing tiers.";
+          priority = "MEDIUM";
+        } else if (theme.category === "UX/Design") {
+          action = "Conduct user usability testing sessions and simplify layout menus for the core module.";
+          priority = "HIGH";
+        } else if (theme.category === "Customer Support") {
+          action = "Implement automated chatbot routing and increase support staff availability during peak windows.";
+          priority = "HIGH";
+        }
+
+        return {
+          title: `Optimize ${theme.name}`,
+          action,
+          priority
+        };
+      });
+
+      const timelineInsights = [
+        {
+          time: "Phase 1 (Immediate)",
+          insight: `Mitigate primary critical concerns surrounding ${topTheme} through immediate database and system hotfixes.`
+        },
+        {
+          time: "Phase 2 (Next 30 Days)",
+          insight: `Formulate a detailed product design and performance roadmap addressing ${secondTheme} feedback.`
+        }
+      ];
+
+      await prisma.report.create({
+        data: {
+          projectId,
+          executiveSummary,
+          keyFindings,
+          recommendations,
+          timelineInsights
+        }
+      });
+    } catch (error) {
+      console.error("Failed to generate report:", error);
+      await prisma.report.create({
+        data: {
+          projectId,
+          executiveSummary: "Analysis completed. Detailed insights generated.",
+          keyFindings: [],
+          recommendations: []
+        }
+      });
+    }
+
+    // Update status to complete
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "COMPLETED" }
     });
+    await updateJobProgress(100, "COMPLETED");
 
-    const recommendations = themeCounts.slice(0, 3).map((theme, index) => {
-      let action = `Conduct a target review of customer complaints regarding ${theme.name} and align product enhancements.`;
-      let priority = "MEDIUM";
-
-      if (theme.category === "Performance") {
-        action = "Optimize database query paths, configure caching parameters, and audit API payload response times.";
-        priority = "HIGH";
-      } else if (theme.category === "Pricing") {
-        action = "Perform a competitive pricing review and analyze the viability of entry-level pricing tiers.";
-        priority = "MEDIUM";
-      } else if (theme.category === "UX/Design") {
-        action = "Conduct user usability testing sessions and simplify layout menus for the core module.";
-        priority = "HIGH";
-      } else if (theme.category === "Customer Support") {
-        action = "Implement automated chatbot routing and increase support staff availability during peak windows.";
-        priority = "HIGH";
-      }
-
-      return {
-        title: `Optimize ${theme.name}`,
-        action,
-        priority
-      };
+    console.log(`Pipeline analysis completed for project ${projectId}!`);
+  } catch (pipelineErr: any) {
+    console.error(`Pipeline execution error for project ${projectId}:`, pipelineErr);
+    await prisma.project.update({
+      where: { id: projectId },
+      data: { status: "FAILED" }
     });
-
-    const timelineInsights = [
-      {
-        time: "Phase 1 (Immediate)",
-        insight: `Mitigate primary critical concerns surrounding ${topTheme} through immediate database and system hotfixes.`
-      },
-      {
-        time: "Phase 2 (Next 30 Days)",
-        insight: `Formulate a detailed product design and performance roadmap addressing ${secondTheme} feedback.`
-      }
-    ];
-
-    await prisma.report.create({
-      data: {
-        projectId,
-        executiveSummary,
-        keyFindings,
-        recommendations,
-        timelineInsights
-      }
-    });
-  } catch (error) {
-    console.error("Failed to generate report:", error);
-    await prisma.report.create({
-      data: {
-        projectId,
-        executiveSummary: "Analysis completed. Detailed insights generated.",
-        keyFindings: [],
-        recommendations: []
-      }
-    });
+    await updateJobProgress(0, "FAILED", pipelineErr.message || String(pipelineErr));
+    throw pipelineErr;
   }
-
-  // Update status to complete
-  await prisma.project.update({
-    where: { id: projectId },
-    data: { status: "COMPLETED" }
-  });
-
-  console.log(`Pipeline analysis completed for project ${projectId}!`);
 }
