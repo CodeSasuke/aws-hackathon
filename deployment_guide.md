@@ -95,15 +95,7 @@ To support direct-to-S3 Excel/CSV uploads from your browser, you must create an 
 
 ## 3. AWS Bedrock Model Access
 
-AWS Bedrock requires you to manually request model access before your API calls can invoke models.
-
-### Steps:
-1. Search for **Amazon Bedrock** in your AWS Console.
-2. Ensure you are in a region that supports Bedrock Claude 3.5 Sonnet (e.g., **Tokyo `ap-northeast-1`** or **N. Virginia `us-east-1`**).
-3. On the left sidebar, click **Model access** (near the bottom).
-4. Click **Manage model access** in the top right.
-5. Check the box next to **Anthropic -> Claude 3.5 Sonnet**.
-6. Click **Save changes** (access is granted instantly).
+> **Note:** The Bedrock Model Access page has been retired by AWS. Models (including Claude 3.5 Sonnet) are now **automatically enabled** on first invocation in your account. No manual activation is needed. Simply ensure your IAM user has the `bedrock:InvokeModel` permission (covered in Step 4 below) and the model will work immediately.
 
 ---
 

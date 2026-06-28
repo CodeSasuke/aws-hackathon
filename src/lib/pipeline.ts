@@ -131,8 +131,19 @@ export function clusterResponses(responses: { id: string; text: string }[], thre
 /**
  * Batch analysis of representative responses using AWS Bedrock Claude 3.5 Sonnet
  */
-export async function analyzeBatchWithBedrock(items: { id: string; text: string }[]): Promise<Record<string, EnrichedOutput>> {
+export async function analyzeBatchWithBedrock(
+  items: { id: string; text: string }[],
+  projectMetadata?: { name: string; description: string | null; industry?: string | null }
+): Promise<Record<string, EnrichedOutput>> {
   const systemPrompt = `You are an expert survey analysis bot. Analyze the sentiments and themes of the given survey responses.
+${projectMetadata ? `
+BUSINESS & SURVEY CONTEXT:
+- Survey Project: ${projectMetadata.name}
+- Description/Product Context: ${projectMetadata.description || "General customer feedback survey"}
+- Industry Vertical: ${projectMetadata.industry || "Software & Technology"}
+
+Instructions: Make sure to tailor your category classifications, theme extractions, and suggested actions to be highly specific and relevant to the business context detailed above.
+` : ""}
 Return a valid JSON object mapping each response ID to its analysis result.
 
 JSON Output Format:
@@ -177,6 +188,11 @@ JSON Output Format:
  * Main analysis pipeline execution
  */
 export async function runSurveyAnalysisPipeline(projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId }
+  });
+  if (!project) throw new Error("Project not found: " + projectId);
+
   await prisma.project.update({
     where: { id: projectId },
     data: { status: "PARSING" }
@@ -281,7 +297,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     const chunk = representatives.slice(i, i + chunkSize);
     console.log(`Sending Bedrock batch ${Math.floor(i / chunkSize) + 1}/${Math.ceil(representatives.length / chunkSize)}...`);
     
-    const batchResults = await analyzeBatchWithBedrock(chunk);
+    const batchResults = await analyzeBatchWithBedrock(chunk, project);
     
     // Propagate labels to all members in the cluster
     for (const rep of chunk) {

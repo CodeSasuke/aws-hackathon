@@ -55,7 +55,7 @@ export async function getPresignedDownloadUrl(key: string): Promise<string> {
  * Invoke Claude 3.5 Sonnet on AWS Bedrock
  */
 export async function invokeClaude35(systemPrompt: string, userPrompt: string, temperature = 0.2): Promise<string> {
-  const modelId = "anthropic.claude-3-5-sonnet-20241022-v2:0";
+  const modelId = "us.anthropic.claude-3-5-sonnet-20241022-v2:0";
   
   const payload = {
     anthropic_version: "bedrock-2023-05-31",
