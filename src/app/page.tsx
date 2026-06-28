@@ -819,7 +819,7 @@ export default function Home() {
                 <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">2. Core Observations & Impact</h3>
                 <div className="grid grid-cols-1 gap-4">
                   {(projectData?.reports?.[0]?.keyFindings as any[])?.length > 0 ? (
-                    (projectData.reports[0].keyFindings as any[]).map((finding, idx) => (
+                    (projectData?.reports?.[0]?.keyFindings as any[]).map((finding, idx) => (
                       <div key={idx} className="border border-gray-200 bg-gray-50 p-5 rounded">
                         <h4 className="font-bold text-blue-700 text-sm">Finding {idx + 1}: {finding.title}</h4>
                         <p className="text-xs text-gray-700 mt-1.5 leading-relaxed">
@@ -860,7 +860,7 @@ export default function Home() {
                 <h3 className="font-bold text-sm text-blue-800 uppercase tracking-widest">3. Strategic Recommendations</h3>
                 <div className="space-y-3">
                   {(projectData?.reports?.[0]?.recommendations as any[])?.length > 0 ? (
-                    (projectData.reports[0].recommendations as any[]).map((rec, idx) => (
+                    (projectData?.reports?.[0]?.recommendations as any[]).map((rec, idx) => (
                       <div key={idx} className="flex border border-gray-150 rounded overflow-hidden">
                         <div className={`w-1.5 ${rec.priority === "HIGH" ? "bg-red-500" : rec.priority === "MEDIUM" ? "bg-amber-500" : "bg-gray-400"}`}></div>
                         <div className="p-4 bg-gray-50 flex-1 text-xs">
