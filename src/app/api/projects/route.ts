@@ -134,7 +134,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const { name, description, s3Key, filename, fileSize, textColumns } = await req.json();
+    const { name, description, s3Key, filename, fileSize, textColumns, productConfig } = await req.json();
 
     if (!name || !s3Key || !filename) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
@@ -243,7 +243,7 @@ export async function POST(req: Request) {
           organizationId: user.organizationId,
           createdById: user.id,
           status: "PENDING",
-          nlpConfig: initialNlpConfig
+          nlpConfig: productConfig || initialNlpConfig
         }
       });
 
