@@ -1,6 +1,12 @@
 # SurveyIQ Offline NLP Engine Architecture
 
-This document outlines the detailed system and pipeline architectures of the SurveyIQ fully-offline NLP engine.
+This document outlines the detailed system and pipeline architectures of the SurveyIQ NLP engine.
+
+> [!NOTE]
+> **Clarification on "Offline" Processing:**
+> While SurveyIQ is a web-connected application that uploads files online (via AWS S3) and persists data to a database (AWS RDS), its core NLP engine is classified as **offline** because:
+> - **Self-Contained Inference:** The pipeline runs spaCy (`en_core_web_sm`) and local cached SentenceTransformer models entirely within the local server environment. No third-party online LLM APIs (like OpenAI or Claude) are called during evaluation.
+> - **Asynchronous Batch Execution:** Computation is decoupled from the Next.js HTTP request-response thread. Jobs are queued and leased by background worker processes asynchronously.
 
 ---
 

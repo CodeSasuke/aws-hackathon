@@ -4,6 +4,12 @@ SurveyIQ is a high-performance customer feedback analysis platform. It enables o
 
 Designed for both automated processing and precision human review, SurveyIQ combines a fast **Next.js 15** web application with a specialized **10-stage offline Python NLP Pipeline** backed by **Amazon Web Services (AWS)**.
 
+> [!NOTE]
+> **What does "Offline" mean in SurveyIQ?**
+> Although spreadsheets are uploaded online to cloud storage (**Amazon S3**) via the web interface, the analytical pipeline is **offline** in two key ways:
+> 1. **Offline Inference:** The NLP engine executes local, self-contained models (spaCy and cached SentenceTransformers) directly on the worker server. It never transmits customer feedback to third-party online APIs (like OpenAI or Claude).
+> 2. **Offline Batch Processing:** Processing is fully decoupled from the web server. Uploaded files are queued and processed asynchronously in the background by separate worker processes rather than blocking synchronous HTTP request/response loops.
+
 ---
 
 ## 🚀 Key Features
