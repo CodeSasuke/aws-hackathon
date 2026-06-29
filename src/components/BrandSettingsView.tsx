@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Trash2, Sparkles, Building, Briefcase, Tag, Target, Sliders } from "lucide-react";
+import { Plus, Trash2, Building, Briefcase, Tag, Target, Sliders } from "lucide-react";
 
 interface BrandSettingsViewProps {
   currentUser: any;
@@ -172,7 +172,7 @@ export const BrandSettingsView: React.FC<BrandSettingsViewProps> = ({ currentUse
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
         
-        {/* Left Columns: Company, Brand, AI Context */}
+        {/* Left Columns: Company, Brand, Analysis Context */}
         <div className="md:col-span-2 space-y-6">
           
           {/* Card: Company Details */}
@@ -344,7 +344,7 @@ export const BrandSettingsView: React.FC<BrandSettingsViewProps> = ({ currentUse
           </div>
         </div>
 
-        {/* Right Column: Competitors, Terminology, AI Instructions */}
+        {/* Right Column: Competitors, Terminology, Analysis Instructions */}
         <div className="space-y-6">
           
           {/* Card: Competitors & Terminology */}
@@ -369,24 +369,6 @@ export const BrandSettingsView: React.FC<BrandSettingsViewProps> = ({ currentUse
             />
           </div>
 
-          {/* Card: AI Defaults */}
-          <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
-            <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
-              <Sparkles className="h-4.5 w-4.5 text-blue-500" />
-              <h3 className="font-bold text-sm text-gray-800 font-sans">AI Configuration Defaults</h3>
-            </div>
-
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-gray-500">Custom Analysis Prompts</label>
-              <textarea
-                value={customInstructions}
-                onChange={(e) => setCustomInstructions(e.target.value)}
-                placeholder="Define organization-wide instructions for survey classification..."
-                rows={4}
-                className="w-full bg-gray-50 border border-gray-255 hover:border-gray-350 focus:border-blue-500 rounded-lg p-2.5 text-xs text-gray-800 outline-none transition-all font-medium font-sans"
-              />
-            </div>
-          </div>
         </div>
       </div>
     </div>

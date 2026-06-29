@@ -65,7 +65,7 @@ export async function POST(req: Request) {
       pendingAnalysis.push({ index: i, text });
     }
 
-    console.log(`Local Cache hit: ${texts.length - pendingAnalysis.length} rows. Unique items for AI: ${pendingAnalysis.length}`);
+    console.log(`Local Cache hit: ${texts.length - pendingAnalysis.length} rows. Unique items for processing: ${pendingAnalysis.length}`);
 
     // Step 2: Local Clustering
     if (pendingAnalysis.length > 0) {

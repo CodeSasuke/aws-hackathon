@@ -71,7 +71,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     dashSheet.getColumn("C").width = 20;
 
     // 2. Create Enriched Dataset Sheet
-    const dataSheet = workbook.addWorksheet("AI Enriched Dataset");
+    const dataSheet = workbook.addWorksheet("Enriched Dataset");
     
     // Get headers from first row
     const firstRowData = responses[0].rawData as Record<string, any>;

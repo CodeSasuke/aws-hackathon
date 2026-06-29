@@ -1651,7 +1651,7 @@ function HomeContent() {
             </div>
           )}
 
-          {/* TAB E: PREDEFINED BUSINESS QUERIES ("ASK AI") */}
+          {/* TAB E: PREDEFINED BUSINESS QUERIES ("ASK ENGINE") */}
           {activeTab === "queries" && (
             <div className="max-w-3xl mx-auto space-y-6">
               <div className="bg-white border border-gray-200 rounded p-6 shadow-sm">

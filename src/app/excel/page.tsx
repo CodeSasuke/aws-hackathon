@@ -68,7 +68,7 @@ export default function ExcelAddInPage() {
 
         // Filter out empty rows or headers if needed
         addLog(`Found ${texts.length} rows. Dispatched to SurveyIQ Bedrock pipeline...`);
-        setStatus("Running AI analysis...");
+        setStatus("Running feedback analysis...");
 
         // Call our Next.js API endpoint
         const response = await fetch("/api/excel-add-in/analyze", {
@@ -83,7 +83,7 @@ export default function ExcelAddInPage() {
         }
 
         const results = data.results;
-        addLog("AI processing completed. Writing results back to spreadsheet...");
+        addLog("NLP processing completed. Writing results back to spreadsheet...");
         setStatus("Writing results back...");
 
         // Prepare adjacent offset columns matrix to write:
@@ -132,7 +132,7 @@ export default function ExcelAddInPage() {
 
         // Highlight header values if first row is a header (optional, we format anyway)
         await context.sync();
-        addLog("Spreadsheet successfully enriched with AI fields.");
+        addLog("Spreadsheet successfully enriched with analysis fields.");
         setStatus("Complete! Sheet updated.");
       });
     } catch (error: any) {

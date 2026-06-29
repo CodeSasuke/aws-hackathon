@@ -44,7 +44,7 @@ export function evaluateRowQuality(rowRawData: Record<string, any>, textCols: st
 }
 
 /**
- * Preprocess empty, N/A, or simple deterministic responses locally without AI
+ * Preprocess empty, N/A, or simple deterministic responses locally without external models
  */
 export function getLocalDeterministicLabel(text: string): EnrichedOutput | null {
   const clean = text.trim().toLowerCase();

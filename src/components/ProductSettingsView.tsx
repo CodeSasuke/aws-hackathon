@@ -348,7 +348,7 @@ export const ProductSettingsView: React.FC<ProductSettingsViewProps> = ({ projec
           </div>
         </div>
 
-        {/* Right Column: Key Attributes & AI Defaults overrides */}
+        {/* Right Column: Key Attributes & Defaults overrides */}
         <div className="space-y-6">
           
           {/* Card: Product Attributes */}
@@ -391,7 +391,7 @@ export const ProductSettingsView: React.FC<ProductSettingsViewProps> = ({ projec
             />
           </div>
 
-          {/* Card: AI Prompt Instructions */}
+          {/* Card: Prompt Instructions */}
           <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm space-y-4">
             <div className="flex items-center space-x-2 border-b border-gray-100 pb-2">
               <Sparkles className="h-4.5 w-4.5 text-blue-500" />

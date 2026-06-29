@@ -18,7 +18,7 @@ export type WizardStep = "welcome" | "project" | "product" | "upload" | "analyze
 interface OnboardingContextType {
   wizardStep: WizardStep;
   setWizardStep: (step: WizardStep) => void;
-  productSection: number; // 0: Info, 1: AI Context, 2: Review
+  productSection: number; // 0: Info, 1: Analysis Context, 2: Review
   setProductSection: (section: number) => void;
   expandAll: boolean;
   setExpandAll: (val: boolean) => void;

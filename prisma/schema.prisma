@@ -104,7 +104,7 @@ model Response {
   rawData         Json
   responseHash    String
   
-  // AI-Enriched Fields
+  // NLP-Enriched Fields
   sentiment       Sentiment?
   themeId         String?
   theme           Theme?     @relation(fields: [themeId], references: [id], onDelete: SetNull)

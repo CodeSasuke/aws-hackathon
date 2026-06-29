@@ -155,7 +155,7 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
     doc.font("Helvetica-Oblique")
        .fontSize(9)
        .fillColor("#888888")
-       .text("This report was generated using the SurveyIQ AI Intelligence engine.", 50, doc.page.height - 50, { align: "center" });
+       .text("This report was generated using the SurveyIQ Analytics engine.", 50, doc.page.height - 50, { align: "center" });
 
     // Finalize PDF
     doc.end();

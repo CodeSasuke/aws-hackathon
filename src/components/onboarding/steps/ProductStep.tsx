@@ -330,7 +330,7 @@ export const ProductStep: React.FC<ProductStepProps> = ({ currentUser }) => {
               )}
             </div>
 
-            {/* SECTION 2: AI CONTEXT / ATTRIBUTES */}
+            {/* SECTION 2: CONTEXT / ATTRIBUTES */}
             <div className="border border-gray-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => {
