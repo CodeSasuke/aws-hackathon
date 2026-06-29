@@ -33,7 +33,6 @@ import {
   Award,
   Users,
   Layers,
-  Database,
   LogOut,
   Lock,
   Mail,
@@ -44,6 +43,7 @@ import {
 } from "lucide-react";
 
 import { OnboardingProvider, useOnboarding } from "@/components/onboarding/OnboardingProvider";
+import SurveyIQLogo from "@/components/Logo";
 import OnboardingWizard from "@/components/onboarding/OnboardingWizard";
 import BrandSettingsView from "@/components/BrandSettingsView";
 import ProductSettingsView from "@/components/ProductSettingsView";
@@ -777,7 +777,7 @@ function HomeContent() {
           {/* Logo / Header */}
           <div className="p-8 text-center bg-gray-50 border-b border-gray-100 flex flex-col items-center">
             <div className="h-12 w-12 rounded-lg bg-blue-600 flex items-center justify-center text-white mb-3 shadow-md shadow-blue-100">
-              <Database className="h-6 w-6" />
+              <SurveyIQLogo className="h-6 w-6" variant="white" />
             </div>
             <h1 className="text-2xl font-bold text-gray-900 tracking-tight font-sans">SurveyIQ</h1>
             <p className="text-[10px] text-gray-500 mt-1 uppercase tracking-widest font-semibold font-sans">Enterprise Survey Intelligence</p>
@@ -925,7 +925,7 @@ function HomeContent() {
         <div>
           {/* Brand Header */}
           <div className="h-16 flex items-center px-6 border-b border-gray-200 bg-gray-50">
-            <Database className="h-6 w-6 text-blue-600 mr-2" />
+            <SurveyIQLogo className="h-6 w-6 mr-2" variant="gradient" />
             <div>
               <h1 className="font-bold text-lg text-gray-900 tracking-tight">SurveyIQ</h1>
               <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Survey Intelligence</p>

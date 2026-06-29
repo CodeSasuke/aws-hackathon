@@ -2,7 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import Script from "next/script";
-import { Database, CheckCircle, UploadCloud, AlertCircle } from "lucide-react";
+import { CheckCircle, UploadCloud, AlertCircle } from "lucide-react";
+import SurveyIQLogo from "@/components/Logo";
 
 export default function ExcelAddInPage() {
   const [officeReady, setOfficeReady] = useState(false);
@@ -153,7 +154,7 @@ export default function ExcelAddInPage() {
         
         {/* Brand Header */}
         <div className="flex items-center space-x-2 border-b border-gray-150 pb-4">
-          <Database className="h-6 w-6 text-blue-600" />
+          <SurveyIQLogo className="h-6 w-6" variant="gradient" />
           <div>
             <h1 className="font-bold text-base text-gray-900 tracking-tight">SurveyIQ</h1>
             <p className="text-[10px] text-gray-500 uppercase tracking-widest font-semibold">Survey Intelligence Add-In</p>

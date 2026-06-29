@@ -17,6 +17,94 @@ Designed for both automated processing and precision human review, SurveyIQ comb
 
 ---
 
+## 🖥️ Platform Tour & Core Features
+
+Here is a visual walkthrough of the SurveyIQ platform, detailing key pages, user interfaces, and their underlying backend functionalities:
+
+### 1. Secure Authentication & Gateway
+<p align="center">
+  <img src="docs/Screenshots/login.png" alt="SurveyIQ Login Page" width="850" />
+</p>
+
+* **Description**: A modern, secure gateway serving as the landing interface for user authentication.
+* **Core Functionality**:
+  * Powered by **NextAuth.js** for robust session management and CSRF protection.
+  * Ensures secure entry control, shielding all analytical backend services and database operations from unauthorized access.
+  * Restricts access using role-based routing (RBAC) to ensure audit logs and system settings can only be accessed by authorized admins.
+
+---
+
+### 2. Executive Analytics Dashboard
+<p align="center">
+  <img src="docs/Screenshots/dashboard.png" alt="SurveyIQ Dashboard" width="850" />
+</p>
+
+* **Description**: The operational nerve center of the application, displaying high-level key performance indicators and workspace status.
+* **Core Functionality**:
+  * Real-time metrics showing total processed rows, overall positive/negative sentiment splits, and pending analysis jobs.
+  * Live worker thread status indicating active, idle, and queued states of background NLP services.
+  * Quick-launch buttons to initiate new spreadsheet uploads or review pending manual validation jobs.
+
+---
+
+### 3. Predefined Analytical Queries
+<p align="center">
+  <img src="docs/Screenshots/predefined-queries.png" alt="SurveyIQ Predefined Queries List" width="850" />
+</p>
+<p align="center">
+  <img src="docs/Screenshots/query-response.png" alt="SurveyIQ Predefined Query Results" width="850" />
+</p>
+
+* **Description**: An executive decision-making tool containing pre-packaged SQL and NLP analytical queries designed to answer critical business questions.
+* **Core Functionality**:
+  * Offers structured prompts such as *"What are customers most unhappy about?"* or *"What features are competitors winning on?"*.
+  * On selection, triggers a fast aggregate search utilizing PostgreSQL database indexing and NLP category classifications.
+  * Groups and displays specific customer quotes, sentiment scores, and category occurrences to pinpoint root-cause complaints instantly.
+
+---
+
+### 4. Interactive Feedback Grid
+<p align="center">
+  <img src="docs/Screenshots/excel-grid.png" alt="SurveyIQ Excel Grid Data" width="850" />
+</p>
+
+* **Description**: A dynamic, tabular representation of all feedback entries, showing deep-analyzed metadata per response.
+* **Core Functionality**:
+  * Features full-text search, column sorting, pagination, and color-coded tags for sentiment classifications (*Positive*, *Neutral*, *Negative*).
+  * Displays specific tokens, aspect mappings, Hinglish-to-English translations, and active row lock leases.
+  * Integrated directly with human-in-the-loop overrides—allowing reviewers to manually correct categories or weights with a direct write-back to PostgreSQL and AWS RDS.
+
+---
+
+### 5. Deep-Dive Executive Reports
+<p align="center">
+  <img src="docs/Screenshots/executive-reports.png" alt="SurveyIQ Executive Reports" width="850" />
+</p>
+
+* **Description**: An interactive reporting space built with dynamic visualization panels.
+* **Core Functionality**:
+  * Leverages **Recharts** to display aspect-sentiment correlation matrices, theme distributions, and trendlines.
+  * Enables multi-dimensional filtering (by date, product line, or channel) to view localized customer experiences.
+  * Features export buttons to download print-ready PDF reports or styled Excel sheets containing complete pipeline metrics.
+
+---
+
+### 6. Brand & Product Configurator
+<p align="center">
+  <img src="docs/Screenshots/brand-settings.png" alt="SurveyIQ Brand Settings" width="850" />
+</p>
+<p align="center">
+  <img src="docs/Screenshots/product-settings.png" alt="SurveyIQ Product Settings" width="850" />
+</p>
+
+* **Description**: Global administrative panels where target search models, brand tags, and product associations are defined.
+* **Core Functionality**:
+  * Allows administrators to configure active brand keywords and target competitors for sentiment tracking.
+  * Sets specific product boundaries and lemmatized tags that the FastAPI NLP worker pool scans for during sentence dependency mapping.
+  * Automatically propagates changes to the active spaCy token matching rules without requiring code deployment or server restarts.
+
+---
+
 ## 🛠️ Architecture & Tech Stack
 
 ### System Design
