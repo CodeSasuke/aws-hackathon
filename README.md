@@ -10,6 +10,11 @@ Designed for both automated processing and precision human review, SurveyIQ comb
 > 1. **Offline Inference:** The NLP engine executes local, self-contained models (spaCy and cached SentenceTransformers) directly on the worker server. It never transmits customer feedback to third-party online APIs (like OpenAI or Claude).
 > 2. **Offline Batch Processing:** Processing is fully decoupled from the web server. Uploaded files are queued and processed asynchronously in the background by separate worker processes rather than blocking synchronous HTTP request/response loops.
 
+> [!IMPORTANT]
+> **Developer Note on Concurrency & Pipeline Execution:**
+> * **Current Local Runtime:** For development simplicity and serverless deployment compatibility (Vercel), the Next.js server currently triggers a lightweight, rule-based local TypeScript fallback runner immediately upon file upload.
+> * **Future Production State:** To utilize the complete, modular 15-stage Python spaCy NLP pipeline and avoid database concurrency conflicts, future deployments will delegate batch analysis exclusively to the standalone Python worker pool (`python worker.py`), disabling the local TypeScript fallback executor.
+
 ---
 
 ## 🚀 Key Features
@@ -121,9 +126,10 @@ graph TD
         ExcelUI[Excel Add-In Frontend]
     end
 
-    subgraph APILayer ["API Gateway & Presentation Layer"]
+    subgraph APILayer ["Active API & Local Engine Layer"]
         NextAPI[Next.js API Handler]
         ExcelAPI[Excel Add-In API Endpoint]
+        JSPipeline[TypeScript NLP Pipeline Engine]
     end
 
     subgraph DBLayer ["Database Layer (PostgreSQL)"]
@@ -135,27 +141,30 @@ graph TD
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph BackendLayer ["Python Backend Services"]
+    subgraph EnterpriseRoadmap ["Enterprise Roadmap Subsystem (Optional/Future)"]
         FastAPI[FastAPI Server]
         WorkerPool[Python Worker Pool]
-        PipelineEngine[NLP Pipeline Engine]
+        PipelineEngine[15-Stage NLP Engine]
     end
 
-    WebUI -->|Trigger Bulk Job / View| NextAPI
-    WebUI -->|Live Override / Single Classify| FastAPI
+    %% Active Next.js flow
+    WebUI -->|Trigger Job / View / Override| NextAPI
     ExcelUI -->|Request Cell Analysis| ExcelAPI
+    
+    NextAPI -->|Execute Local Run| JSPipeline
     NextAPI -->|Insert Job PENDING| JobTable
     ExcelAPI -->|Read/Write Cache| CacheTable
-    ExcelAPI -->|Fallback to Local Engine| PipelineEngine
-    FastAPI -->|Query / Update Response| ResponseTable
-    FastAPI -->|Log Override| AuditTable
+    ExcelAPI -->|Fallback to Local Engine| JSPipeline
     
-    WorkerPool -->|SKIP LOCKED Poll| JobTable
-    WorkerPool -->|Lease Heartbeat| JobTable
-    WorkerPool -->|Fetch Responses| ResponseTable
-    WorkerPool -->|Run Stages| PipelineEngine
-    WorkerPool -->|Save Enriched Data| ResponseTable
-    WorkerPool -->|Increment Counts| ThemeTable
+    JSPipeline -->|Update Responses| ResponseTable
+    JSPipeline -->|Log Override| AuditTable
+    JSPipeline -->|Update Theme Counts| ThemeTable
+
+    %% Future Enterprise flow
+    WorkerPool -.->|Poll PENDING| JobTable
+    WorkerPool -.->|Process & Enrich| PipelineEngine
+    PipelineEngine -.->|Save Data| ResponseTable
+    FastAPI -.->|Future Override Log| AuditTable
 ```
 
 ### Technology Stack

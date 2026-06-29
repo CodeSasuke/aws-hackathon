@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         continue;
       }
 
-      // Otherwise queue for Bedrock/Clustering
+      // Otherwise queue for local clustering
       pendingAnalysis.push({ index: i, text });
     }
 
@@ -80,7 +80,7 @@ export async function POST(req: Request) {
         if (item) representatives.push(item);
       }
 
-      // Batch call Bedrock Claude 3.5 Sonnet
+      // Batch call local analytical matching engine
       const chunkSize = 25;
       for (let k = 0; k < representatives.length; k += chunkSize) {
         const chunk = representatives.slice(k, k + chunkSize);

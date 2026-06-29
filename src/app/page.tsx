@@ -39,7 +39,10 @@ import {
   Plus,
   Key,
   Building,
-  Sliders
+  Sliders,
+  Edit2,
+  Save,
+  X
 } from "lucide-react";
 
 import { OnboardingProvider, useOnboarding } from "@/components/onboarding/OnboardingProvider";
@@ -175,6 +178,56 @@ function HomeContent() {
   const [syncGlobal, setSyncGlobal] = useState<boolean>(false);
   const [wizardActive, setWizardActive] = useState<boolean>(false);
   const { resetOnboarding } = useOnboarding();
+
+  // Manual Override inline states
+  const [editingRowId, setEditingRowId] = useState<string | null>(null);
+  const [editSentiment, setEditSentiment] = useState<string>("");
+  const [editTheme, setEditTheme] = useState<string>("");
+  const [editCategory, setEditCategory] = useState<string>("");
+  const [editAction, setEditAction] = useState<string>("");
+  const [editUrgency, setEditUrgency] = useState<number>(0);
+  const [savingRowId, setSavingRowId] = useState<string | null>(null);
+
+  const handleSaveOverride = async (rowId: string) => {
+    setSavingRowId(rowId);
+    try {
+      const res = await fetch(`/api/responses/${rowId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(currentUser?.email ? { "x-user-email": currentUser.email } : {})
+        },
+        body: JSON.stringify({
+          sentiment: editSentiment,
+          category: editCategory,
+          themeName: editTheme,
+          suggestedAction: editAction,
+          urgency: editUrgency
+        })
+      });
+
+      if (!res.ok) {
+        throw new Error("Failed to save override");
+      }
+
+      await loadProjectDetails(selectedProjectId);
+      setEditingRowId(null);
+    } catch (err: any) {
+      console.error(err);
+      alert("Error saving manual override: " + err.message);
+    } finally {
+      setSavingRowId(null);
+    }
+  };
+
+  const startEditingRow = (row: any) => {
+    setEditingRowId(row.id);
+    setEditSentiment(row.sentiment);
+    setEditTheme(row.theme);
+    setEditCategory(row.category);
+    setEditAction(row.action);
+    setEditUrgency(row.urgency);
+  };
 
   useEffect(() => {
     const handleSwitchTab = (e: Event) => {
@@ -1511,48 +1564,142 @@ function HomeContent() {
                         <th className="py-3 px-4 w-[200px]">Suggested Action</th>
                         <th className="py-3 px-4 w-20 text-center">Urgency</th>
                         <th className="py-3 px-4 w-32 text-center">Quality Status</th>
+                        <th className="py-3 px-4 w-28 text-center">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 text-sm">
                       {filteredResponses.length === 0 ? (
                         <tr>
-                          <td colSpan={8} className="py-12 text-center text-gray-500 font-medium">
+                          <td colSpan={9} className="py-12 text-center text-gray-500 font-medium">
                             No records found matching filters.
                           </td>
                         </tr>
                       ) : (
                         filteredResponses.map((r, idx) => (
                           <tr key={idx} className="hover:bg-gray-50 transition-colors">
-                            <td className="py-3.5 px-4 font-mono text-xs text-gray-500">{r.rowIndex}</td>
-                            <td className="py-3.5 px-4 text-gray-800 truncate" title={r.text}>
-                              {r.text}
-                            </td>
-                            <td className="py-3.5 px-4">
-                              <span
-                                className={`px-2.5 py-0.5 rounded text-[11px] font-bold inline-block ${
-                                  r.sentiment === "POSITIVE"
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : r.sentiment === "NEGATIVE"
-                                    ? "bg-red-50 text-red-700 border border-red-200"
-                                    : "bg-gray-50 text-gray-700 border border-gray-200"
-                                }`}
-                              >
-                                {r.sentiment}
-                              </span>
-                            </td>
-                            <td className="py-3.5 px-4 font-semibold text-gray-700 truncate" title={r.theme}>
-                              {r.theme}
-                            </td>
-                            <td className="py-3.5 px-4 text-gray-600 truncate">{r.category}</td>
-                            <td className="py-3.5 px-4 text-gray-600 truncate" title={r.action}>
-                              {r.action}
-                            </td>
-                            <td className="py-3.5 px-4 text-center font-bold text-gray-700">{r.urgency}</td>
-                            <td className="py-3.5 px-4 text-center text-xs font-semibold">
-                              <span className={r.quality === "High Quality" ? "text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100" : "text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"}>
-                                {r.quality}
-                              </span>
-                            </td>
+                            {editingRowId === r.id ? (
+                              <>
+                                <td className="py-3.5 px-4 font-mono text-xs text-gray-500">{r.rowIndex}</td>
+                                <td className="py-3.5 px-4 text-gray-800 truncate" title={r.text}>
+                                  {r.text}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <select
+                                    value={editSentiment}
+                                    onChange={(e) => setEditSentiment(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500 font-bold"
+                                  >
+                                    <option value="POSITIVE">POSITIVE</option>
+                                    <option value="NEUTRAL">NEUTRAL</option>
+                                    <option value="NEGATIVE">NEGATIVE</option>
+                                  </select>
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <input
+                                    type="text"
+                                    value={editTheme}
+                                    onChange={(e) => setEditTheme(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500 font-medium"
+                                  />
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <input
+                                    type="text"
+                                    value={editCategory}
+                                    onChange={(e) => setEditCategory(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
+                                  />
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <input
+                                    type="text"
+                                    value={editAction}
+                                    onChange={(e) => setEditAction(e.target.value)}
+                                    className="w-full bg-white border border-gray-300 rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500"
+                                  />
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <select
+                                    value={editUrgency}
+                                    onChange={(e) => setEditUrgency(parseInt(e.target.value))}
+                                    className="bg-white border border-gray-300 rounded px-1.5 py-1 text-xs outline-none focus:border-blue-500 font-bold"
+                                  >
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                  </select>
+                                </td>
+                                <td className="py-3.5 px-4 text-center text-xs font-semibold">
+                                  <span className={r.quality === "High Quality" ? "text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100" : "text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"}>
+                                    {r.quality}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <div className="flex items-center justify-center space-x-1.5">
+                                    <button
+                                      onClick={() => handleSaveOverride(r.id)}
+                                      disabled={savingRowId === r.id}
+                                      className="p-1 text-emerald-600 hover:text-emerald-800 hover:bg-emerald-50 rounded transition-colors"
+                                      title="Save Override"
+                                    >
+                                      <Save className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingRowId(null)}
+                                      disabled={savingRowId === r.id}
+                                      className="p-1 text-red-600 hover:text-red-800 hover:bg-red-50 rounded transition-colors"
+                                      title="Cancel"
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-3.5 px-4 font-mono text-xs text-gray-500">{r.rowIndex}</td>
+                                <td className="py-3.5 px-4 text-gray-800 truncate" title={r.text}>
+                                  {r.text}
+                                </td>
+                                <td className="py-3.5 px-4">
+                                  <span
+                                    className={`px-2.5 py-0.5 rounded text-[11px] font-bold inline-block ${
+                                      r.sentiment === "POSITIVE"
+                                        ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                        : r.sentiment === "NEGATIVE"
+                                        ? "bg-red-50 text-red-700 border border-red-200"
+                                        : "bg-gray-50 text-gray-700 border border-gray-200"
+                                    }`}
+                                  >
+                                    {r.sentiment}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 font-semibold text-gray-700 truncate" title={r.theme}>
+                                  {r.theme}
+                                </td>
+                                <td className="py-3.5 px-4 text-gray-600 truncate">{r.category}</td>
+                                <td className="py-3.5 px-4 text-gray-600 truncate" title={r.action}>
+                                  {r.action}
+                                </td>
+                                <td className="py-3.5 px-4 text-center font-bold text-gray-700">{r.urgency}</td>
+                                <td className="py-3.5 px-4 text-center text-xs font-semibold">
+                                  <span className={r.quality === "High Quality" ? "text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100" : "text-red-600 bg-red-50 px-2 py-0.5 rounded border border-red-100"}>
+                                    {r.quality}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-4 text-center">
+                                  <button
+                                    onClick={() => startEditingRow(r)}
+                                    className="p-1 text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded transition-colors"
+                                    title="Edit Row Override"
+                                  >
+                                    <Edit2 className="h-4 w-4" />
+                                  </button>
+                                </td>
+                              </>
+                            )}
                           </tr>
                         ))
                       )}

@@ -68,7 +68,7 @@ export default function ExcelAddInPage() {
         }
 
         // Filter out empty rows or headers if needed
-        addLog(`Found ${texts.length} rows. Dispatched to SurveyIQ Bedrock pipeline...`);
+        addLog(`Found ${texts.length} rows. Dispatched to SurveyIQ analytical pipeline...`);
         setStatus("Running feedback analysis...");
 
         // Call our Next.js API endpoint

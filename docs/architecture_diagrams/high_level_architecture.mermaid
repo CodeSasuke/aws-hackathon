@@ -1,15 +1,16 @@
 graph TD
-    subgraph Client Layer
+    subgraph ClientLayer ["Client Layer"]
         WebUI[Next.js React Frontend]
         ExcelUI[Excel Add-In Frontend]
     end
 
-    subgraph API Gateway & Presentation Layer
+    subgraph APILayer ["Active API & Local Engine Layer"]
         NextAPI[Next.js API Handler]
         ExcelAPI[Excel Add-In API Endpoint]
+        JSPipeline[TypeScript NLP Pipeline Engine]
     end
 
-    subgraph Database Layer (PostgreSQL)
+    subgraph DBLayer ["Database Layer (PostgreSQL)"]
         Postgres[(PostgreSQL Database)]
         ResponseTable[Response Table]
         JobTable[AnalysisJob Queue]
@@ -18,24 +19,27 @@ graph TD
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph Python Backend Services
+    subgraph EnterpriseRoadmap ["Enterprise Roadmap Subsystem (Optional/Future)"]
         FastAPI[FastAPI Server]
         WorkerPool[Python Worker Pool]
-        PipelineEngine[NLP Pipeline Engine]
+        PipelineEngine[15-Stage NLP Engine]
     end
 
-    WebUI -->|Trigger Bulk Job / View| NextAPI
-    WebUI -->|Live Override / Single Classify| FastAPI
+    %% Active Next.js flow
+    WebUI -->|Trigger Job / View / Override| NextAPI
     ExcelUI -->|Request Cell Analysis| ExcelAPI
+    
+    NextAPI -->|Execute Local Run| JSPipeline
     NextAPI -->|Insert Job PENDING| JobTable
     ExcelAPI -->|Read/Write Cache| CacheTable
-    ExcelAPI -->|Fallback to Local Engine| PipelineEngine
-    FastAPI -->|Query / Update Response| ResponseTable
-    FastAPI -->|Log Override| AuditTable
+    ExcelAPI -->|Fallback to Local Engine| JSPipeline
     
-    WorkerPool -->|SKIP LOCKED Poll| JobTable
-    WorkerPool -->|Lease Heartbeat| JobTable
-    WorkerPool -->|Fetch Responses| ResponseTable
-    WorkerPool -->|Run Stages| PipelineEngine
-    WorkerPool -->|Save Enriched Data| ResponseTable
-    WorkerPool -->|Increment Counts| ThemeTable
+    JSPipeline -->|Update Responses| ResponseTable
+    JSPipeline -->|Log Override| AuditTable
+    JSPipeline -->|Update Theme Counts| ThemeTable
+
+    %% Future Enterprise flow
+    WorkerPool -.->|Poll PENDING| JobTable
+    WorkerPool -.->|Process & Enrich| PipelineEngine
+    PipelineEngine -.->|Save Data| ResponseTable
+    FastAPI -.->|Future Override Log| AuditTable

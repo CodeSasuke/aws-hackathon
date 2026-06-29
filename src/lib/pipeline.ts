@@ -701,7 +701,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
       }
     });
 
-    // Step 5: Generate McKinsey-Style Executive Report Summary via Bedrock
+    // Step 5: Generate Executive Report Summary Heuristics
     console.log("Generating Executive Insights Summary...");
     const themeCounts = await prisma.theme.findMany({
       where: { projectId },
