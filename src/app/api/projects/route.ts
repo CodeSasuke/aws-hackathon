@@ -221,13 +221,29 @@ export async function POST(req: Request) {
 
     // 4. Create Project, SurveyFile, and Response rows in a database transaction
     const project = await prisma.$transaction(async (tx: any) => {
+      // Inherit global brand/product configuration from the most recent project in the organization
+      const lastProject = await tx.project.findFirst({
+        where: { organizationId: user.organizationId, nlpConfig: { not: null } },
+        orderBy: { createdAt: "desc" },
+        select: { nlpConfig: true }
+      });
+      
+      const initialNlpConfig = lastProject?.nlpConfig || {
+        primaryBrand: "SurveyIQ",
+        competitors: [],
+        categories: [],
+        ignoreWords: [],
+        customPhrases: []
+      };
+
       const proj = await tx.project.create({
         data: {
           name,
           description,
           organizationId: user.organizationId,
           createdById: user.id,
-          status: "PENDING"
+          status: "PENDING",
+          nlpConfig: initialNlpConfig
         }
       });
 

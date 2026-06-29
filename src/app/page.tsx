@@ -158,6 +158,7 @@ export default function Home() {
   const [allColumns, setAllColumns] = useState<string[]>([]);
   const [selectedTextCols, setSelectedTextCols] = useState<string[]>([]);
   const [tempKey, setTempKey] = useState<string>("");
+  const [syncGlobal, setSyncGlobal] = useState<boolean>(false);
 
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -413,17 +414,18 @@ export default function Home() {
       const res = await fetch(`/api/projects/${selectedProjectId}/nlp-config`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(configPayload)
+        body: JSON.stringify({ config: configPayload, syncGlobal })
       });
       if (res.ok) {
         const updated = await res.json();
         setNlpConfig(updated);
-        alert("NLP settings updated successfully.");
+        alert(syncGlobal ? "Global brand configurations synced successfully across all projects." : "Configurations saved successfully for this project.");
+        setSyncGlobal(false);
       } else {
-        alert("Failed to update NLP settings.");
+        alert("Failed to update configurations.");
       }
     } catch (err) {
-      console.error("Error saving NLP config", err);
+      console.error("Error saving config", err);
     }
   };
 
@@ -901,6 +903,17 @@ export default function Home() {
               Executive Dashboard
             </button>
             <button
+              onClick={() => setActiveTab("settings")}
+              className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
+                activeTab === "settings"
+                  ? "bg-blue-50 text-blue-600 border border-blue-100"
+                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+              }`}
+            >
+              <SettingsIcon className="h-4.5 w-4.5 mr-3" />
+              Brand & Product Settings
+            </button>
+            <button
               onClick={() => setActiveTab("upload")}
               className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
                 activeTab === "upload"
@@ -943,17 +956,6 @@ export default function Home() {
             >
               <HelpCircle className="h-4.5 w-4.5 mr-3" />
               Predefined Queries
-            </button>
-            <button
-              onClick={() => setActiveTab("settings")}
-              className={`w-full flex items-center px-4 py-2.5 text-sm font-medium rounded-md transition-colors ${
-                activeTab === "settings"
-                  ? "bg-blue-50 text-blue-600 border border-blue-100"
-                  : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
-              }`}
-            >
-              <SettingsIcon className="h-4.5 w-4.5 mr-3" />
-              NLP Brand & Settings
             </button>
           </nav>
         </div>
@@ -1643,20 +1645,31 @@ export default function Home() {
             </div>
           )}
 
-          {/* TAB F: PROJECT BRAND & SETTINGS */}
+          {/* TAB F: BRAND AND PRODUCT SETTINGS */}
           {activeTab === "settings" && (
             <div className="space-y-8 max-w-5xl mx-auto pb-16">
               <div className="flex items-center justify-between border-b border-gray-200 pb-4">
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900">Project Brand & NLP Settings</h2>
-                  <p className="text-sm text-gray-500 mt-1">Configure your primary brand, competitors, categories, themes, and synonyms without code or YAML edits.</p>
+                  <h2 className="text-xl font-bold text-gray-900">Brand and Product Settings</h2>
+                  <p className="text-sm text-gray-500 mt-1">Configure global brand guidelines and project-specific product settings (categories, themes, synonyms) to guide the local analysis engine.</p>
                 </div>
-                <button
-                  onClick={() => saveNLPConfig()}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-5 rounded text-sm transition-all shadow shadow-blue-100"
-                >
-                  Save Configurations
-                </button>
+                <div className="flex items-center space-x-4">
+                  <label className="flex items-center space-x-2 text-xs font-semibold text-gray-650 bg-gray-50 border border-gray-200 px-3.5 py-2.5 rounded-md hover:bg-gray-100 transition-colors cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={syncGlobal}
+                      onChange={(e) => setSyncGlobal(e.target.checked)}
+                      className="rounded text-blue-600 focus:ring-blue-500 h-4 w-4 border-gray-300 cursor-pointer"
+                    />
+                    <span>Sync as Global Brand Default</span>
+                  </label>
+                  <button
+                    onClick={() => saveNLPConfig()}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 px-5 rounded text-sm transition-all shadow shadow-blue-100"
+                  >
+                    Save Configurations
+                  </button>
+                </div>
               </div>
 
               {nlpConfig ? (

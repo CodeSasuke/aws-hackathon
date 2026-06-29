@@ -48,7 +48,7 @@ export function evaluateRowQuality(rowRawData: Record<string, any>, textCols: st
  */
 export function getLocalDeterministicLabel(text: string): EnrichedOutput | null {
   const clean = text.trim().toLowerCase();
-  
+
   // Empty / placeholder checks
   if (!clean || ["n/a", "none", "nothing", "-", ".", "no", "nil", "na"].includes(clean)) {
     return {
@@ -153,12 +153,7 @@ export function clusterResponses(responses: { id: string; text: string }[], thre
   return clusters;
 }
 
-/**
- * Batch analysis of representative responses using AWS Bedrock Claude 3.5 Sonnet
- */
-/**
- * Deterministic local NLP matching engine for survey categorization, sentiment analysis, and action tagging
- */
+
 function analyzeTextLocal(
   text: string,
   project?: any
@@ -192,7 +187,7 @@ function analyzeTextLocal(
       }
     }
   }
-  
+
   // Define keyword weights and category rules
   const rules = [
     {
@@ -299,29 +294,29 @@ function analyzeTextLocal(
   }
 
   // Context checks for negation or competitor preference shifts (Valence Shifters)
-  const isCompetitorPreference = 
-    clean.includes("prefer other") || 
-    clean.includes("prefer another") || 
-    clean.includes("better brand") || 
-    clean.includes("better option") || 
+  const isCompetitorPreference =
+    clean.includes("prefer other") ||
+    clean.includes("prefer another") ||
+    clean.includes("better brand") ||
+    clean.includes("better option") ||
     clean.includes("rather have") ||
     clean.includes("prefer my regular") ||
     clean.includes("prefer ultra gold");
 
-  const hasNegation = 
-    clean.includes("not good") || 
-    clean.includes("not great") || 
-    clean.includes("not taste") || 
-    clean.includes("no good") || 
-    clean.includes("isn't") || 
-    clean.includes("isnt") || 
-    clean.includes("doesn't") || 
-    clean.includes("doesnt") || 
+  const hasNegation =
+    clean.includes("not good") ||
+    clean.includes("not great") ||
+    clean.includes("not taste") ||
+    clean.includes("no good") ||
+    clean.includes("isn't") ||
+    clean.includes("isnt") ||
+    clean.includes("doesn't") ||
+    clean.includes("doesnt") ||
     clean.includes("never buy");
 
   // Fallback default categorization using sentiment cues
   let generalSentiment: "POSITIVE" | "NEGATIVE" | "NEUTRAL" = "NEUTRAL";
-  
+
   if (isCompetitorPreference || hasNegation) {
     generalSentiment = "NEGATIVE";
   } else if (clean.includes("good") || clean.includes("love") || clean.includes("great") || clean.includes("thanks") || clean.includes("awesome") || clean.includes("smooth") || clean.includes("tasty") || clean.includes("delicious") || clean.includes("perfect") || clean.includes("nice") || clean.includes("impressed")) {
@@ -407,7 +402,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     // Extract open-ended text fields
     const file = await prisma.surveyFile.findFirst({ where: { projectId } });
     if (!file) throw new Error("No survey file mapping found for project: " + projectId);
-    
+
     const mappings = file.columnMappings as { textCols: string[] };
     const textFieldName = mappings.textCols[0]; // Primary open ended column to analyze
 
@@ -540,7 +535,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     for (let i = 0; i < representatives.length; i += chunkSize) {
       const chunk = representatives.slice(i, i + chunkSize);
       const batchResults = await analyzeBatchLocal(chunk, project);
-      
+
       // Propagate labels to all members in the cluster
       for (const rep of chunk) {
         const repResult = batchResults[rep.id];
@@ -550,7 +545,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
             ...repResult,
             hash: processedResults[rep.id]?.hash
           };
-          
+
           // Propagate to other members in cluster
           const clusterMembers = clusters.get(rep.id) || [];
           for (const memberId of clusterMembers) {
@@ -596,7 +591,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     await updateJobProgress(90, "GENERATING_REPORTS");
 
     console.log("Writing enriched results to Database...");
-    
+
     // Track and create Themes
     const uniqueThemes = new Map<string, { category: string }>();
     for (const result of Object.values(processedResults)) {
@@ -665,7 +660,7 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
     for (let i = 0; i < updatesToRun.length; i += updateBatchSize) {
       const chunk = updatesToRun.slice(i, i + updateBatchSize);
       await Promise.all(
-        chunk.map(up => 
+        chunk.map(up =>
           prisma.response.update({
             where: { id: up!.id },
             data: up!.data
@@ -799,7 +794,7 @@ Addressing these core feedback pillars represents a critical priority for engine
       const timelineInsights = [
         {
           time: "Phase 1 (Immediate / 0-14 days)",
-          insight: themeCounts[0] 
+          insight: themeCounts[0]
             ? `Mitigate key friction points under **${themeCounts[0].name}** through tactical operational adjustments.`
             : "Review general qualitative feedback metrics and establish baseline performance metrics."
         },

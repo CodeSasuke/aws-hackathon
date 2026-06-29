@@ -29,14 +29,30 @@ export async function GET(req: Request, { params }: { params: Promise<any> }) {
 export async function PATCH(req: Request, { params }: { params: Promise<any> }) {
   try {
     const { id } = await params;
-    const config = await req.json();
+    const body = await req.json();
     
-    const updatedProject = await prisma.project.update({
+    // Support both direct config payload and wrapped body { config, syncGlobal }
+    const config = body.config !== undefined ? body.config : body;
+    const syncGlobal = body.syncGlobal || false;
+    
+    const currentProject = await prisma.project.findUnique({
       where: { id },
-      data: { nlpConfig: config }
+      select: { organizationId: true }
     });
+
+    if (syncGlobal && currentProject?.organizationId) {
+      await prisma.project.updateMany({
+        where: { organizationId: currentProject.organizationId },
+        data: { nlpConfig: config }
+      });
+    } else {
+      await prisma.project.update({
+        where: { id },
+        data: { nlpConfig: config }
+      });
+    }
     
-    return NextResponse.json(updatedProject.nlpConfig);
+    return NextResponse.json(config);
   } catch (error) {
     console.error("PATCH nlp-config error:", error);
     return NextResponse.json({ error: "Failed to update NLP configuration" }, { status: 500 });
