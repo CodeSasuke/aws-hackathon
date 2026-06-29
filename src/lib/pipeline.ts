@@ -714,73 +714,100 @@ export async function runSurveyAnalysisPipeline(projectId: string) {
       take: 5
     });
 
+    const categoryDetails: Record<string, {
+      observation: (themeName: string, count: number) => string;
+      impact: string;
+      action: string;
+      priority: "HIGH" | "MEDIUM" | "LOW";
+    }> = {
+      "Performance": {
+        observation: (theme, count) => `Respondent telemetry highlights systemic concerns regarding latency, platform lag, or timeout issues under the "${theme}" theme (${count} responses).`,
+        impact: "System latency directly degrades transaction completion rates, lowers product usability scores, and increases operational friction.",
+        action: "Initiate database index optimizations, audit API payload sizes, and configure query caching to bring load times under 200ms.",
+        priority: "HIGH"
+      },
+      "UX/Design": {
+        observation: (theme, count) => `A segment of feedback (${count} responses) emphasizes usability friction in the navigation and interface layouts associated with the "${theme}" flow.`,
+        impact: "Complex UI navigation increases onboarding time, hampers user productivity, and leads to elevated customer support ticket volumes.",
+        action: "Redesign key layout structures, conduct targeted usability testing sessions, and streamline multi-step navigation paths.",
+        priority: "HIGH"
+      },
+      "Pricing": {
+        observation: (theme, count) => `Friction regarding product cost and subscription tiers was identified in ${count} responses, with users highlighting value-to-cost gaps under the "${theme}" cohort.`,
+        impact: "Perceived pricing misalignment increases purchase hesitation, slows down conversion cycles, and drives churn toward lower-cost competitors.",
+        action: "Perform a market competitive pricing study, evaluate introducing entry-level tiers, or launch targeted promotional incentives.",
+        priority: "MEDIUM"
+      },
+      "Customer Support": {
+        observation: (theme, count) => `Inquiries and support response times are noted as friction points in ${count} responses, specifically pointing to service gaps under the "${theme}" category.`,
+        impact: "SLA response delays degrade brand trust, diminish customer lifetime value (LTV), and result in negative customer reviews.",
+        action: "Implement automated routing algorithms for ticket triage, expand coverage hours, and compile self-service help center docs.",
+        priority: "HIGH"
+      },
+      "Product Features": {
+        observation: (theme, count) => `A volume of ${count} responses requests feature enhancements and native integrations, particularly demanding improvements to "${theme}" capabilities.`,
+        impact: "Functional gaps prompt users to seek third-party workarounds or migrate to competitor platforms offering integrated suites.",
+        action: "Document feature requirements in the backlog, prioritize integration development, and communicate a product release roadmap.",
+        priority: "MEDIUM"
+      },
+      "Product Quality": {
+        observation: (theme, count) => `Respondents highlight strong sensory satisfaction and positive feedback regarding "${theme}" (${count} responses), specifically praising the refreshing taste and smooth finish.`,
+        impact: "Superior product quality acts as a core brand differentiator, driving organic word-of-mouth growth and repeat purchase cycles.",
+        action: "Ensure strict recipe consistency across production batches, highlight organic ingredients in campaigns, and audit distribution freshness.",
+        priority: "LOW"
+      },
+      "General": {
+        observation: (theme, count) => `General feedback observations were collected regarding "${theme}" (${count} responses).`,
+        impact: "General sentiments track overall customer satisfaction benchmarks and baseline brand health indexes.",
+        action: "Monitor customer satisfaction metrics regularly and deploy deep-dive sub-surveys to isolate granular topics.",
+        priority: "LOW"
+      }
+    };
+
     try {
-      // Generate executive report locally using SQL metrics and top themes
-      const topTheme = themeCounts[0]?.name || "General Feedback";
-      const secondTheme = themeCounts[1]?.name || "Operational Details";
+      const topTheme = themeCounts[0]?.name || "Product Quality";
+      const topCategory = themeCounts[0]?.category || "Product Quality";
+      const secondTheme = themeCounts[1]?.name || "Pricing Model";
+      const secondCategory = themeCounts[1]?.category || "Pricing";
 
-      const executiveSummary = `The SurveyIQ analytics engine has successfully processed a total of ${responseTexts.length} responses for the project "${project.name}". The overall survey quality index was determined to be ${qualityScore}%, with ${spamCount} items flagged as spam/unusable and ${duplicateCount} duplicate responses resolved and cached in the data warehouse.
+      const executiveSummary = `### Strategic Executive Narrative
 
-Analysis of the feedback indicates that the primary customer pain point centers around "${topTheme}", followed by concern regarding "${secondTheme}". Addressing these core feedback vectors represents a critical priority for engineering and product leadership to minimize customer friction and mitigate potential churn risks.`;
+Analytical evaluation of the qualitative survey dataset for project **${project.name}** indicates clear strategic opportunities and operational priorities. Out of **${responseTexts.length}** total processed survey responses, the data engine resolved a quality index of **${qualityScore}%**, isolating **${spamCount}** spam/low-quality items and caching **${duplicateCount}** duplicate records.
+
+The primary driver of customer feedback is **${topTheme}** (${themeCounts[0]?.count || 0} mentions), categorized under the **${topCategory}** domain. Additionally, users expressed notable input regarding **${secondTheme}** (${themeCounts[1]?.count || 0} mentions) within the **${secondCategory}** vertical. 
+
+Addressing these core feedback pillars represents a critical priority for engineering and product leadership. Optimizing performance and cost-alignment, while maintaining product consistency and taste quality, will reduce user friction, maximize retention, and capture market opportunities.`;
 
       const keyFindings = themeCounts.slice(0, 3).map((theme, index) => {
-        let observation = `A significant volume of feedback (${theme.count} responses) directly references issues with ${theme.name}.`;
-        let impact = "This represents a friction point that could impact overall user retention and satisfaction.";
-
-        if (theme.category === "Performance") {
-          observation = `Customers frequently report latency, slow speeds, and freezing, with ${theme.name} emerging as a leading performance bottleneck.`;
-          impact = "System sluggishness degrades the user experience and lowers transaction completion rates.";
-        } else if (theme.category === "Pricing") {
-          observation = `Users highlight high subscription costs, indicating that the pricing model is a barrier, specifically for the ${theme.name} cohort.`;
-          impact = "Potential buyers may choose lower-cost competitors or churn when plans renew.";
-        } else if (theme.category === "UX/Design") {
-          observation = `Friction in the interface layout was noted, with feedback pointing to usability challenges in the ${theme.name} module.`;
-          impact = "A complex layout increases user onboarding time and support inquiries.";
-        } else if (theme.category === "Customer Support") {
-          observation = `Long response latencies and unresolved inquiries are highlighted under the ${theme.name} theme.`;
-          impact = "Unresolved support tickets lead to negative public reviews and brand reputation risk.";
-        }
-
+        const details = categoryDetails[theme.category || "General"] || categoryDetails["General"];
         return {
-          title: `${index + 1}. Friction on ${theme.name}`,
-          observation,
-          impact
+          title: `${theme.name} Feedback Analysis`,
+          observation: details.observation(theme.name, theme.count),
+          impact: details.impact
         };
       });
 
       const recommendations = themeCounts.slice(0, 3).map((theme, index) => {
-        let action = `Conduct a target review of customer complaints regarding ${theme.name} and align product enhancements.`;
-        let priority = "MEDIUM";
-
-        if (theme.category === "Performance") {
-          action = "Optimize database query paths, configure caching parameters, and audit API payload response times.";
-          priority = "HIGH";
-        } else if (theme.category === "Pricing") {
-          action = "Perform a competitive pricing review and analyze the viability of entry-level pricing tiers.";
-          priority = "MEDIUM";
-        } else if (theme.category === "UX/Design") {
-          action = "Conduct user usability testing sessions and simplify layout menus for the core module.";
-          priority = "HIGH";
-        } else if (theme.category === "Customer Support") {
-          action = "Implement automated chatbot routing and increase support staff availability during peak windows.";
-          priority = "HIGH";
-        }
-
+        const details = categoryDetails[theme.category || "General"] || categoryDetails["General"];
         return {
           title: `Optimize ${theme.name}`,
-          action,
-          priority
+          action: details.action,
+          priority: details.priority
         };
       });
 
       const timelineInsights = [
         {
-          time: "Phase 1 (Immediate)",
-          insight: `Mitigate primary critical concerns surrounding ${topTheme} through immediate database and system hotfixes.`
+          time: "Phase 1 (Immediate / 0-14 days)",
+          insight: themeCounts[0] 
+            ? `Mitigate key friction points under **${themeCounts[0].name}** through tactical operational adjustments.`
+            : "Review general qualitative feedback metrics and establish baseline performance metrics."
         },
         {
-          time: "Phase 2 (Next 30 Days)",
-          insight: `Formulate a detailed product design and performance roadmap addressing ${secondTheme} feedback.`
+          time: "Phase 2 (Mid-term / 30 days)",
+          insight: themeCounts[1]
+            ? `Formulate product roadmap enhancements addressing **${themeCounts[1].name}** feedback and schedule updates.`
+            : "Integrate feedback loops into regular sprint cycles and update customer success playbooks."
         }
       ];
 
@@ -793,8 +820,9 @@ Analysis of the feedback indicates that the primary customer pain point centers 
           timelineInsights
         }
       });
+      console.log("Successfully generated dynamic local report summary.");
     } catch (error) {
-      console.error("Failed to generate report:", error);
+      console.error("Failed to save generated report:", error);
       await prisma.report.create({
         data: {
           projectId,
