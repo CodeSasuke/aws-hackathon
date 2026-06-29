@@ -1,0 +1,73 @@
+sequenceDiagram
+    autonumber
+    participant Engine as Pipeline Coordinator
+    participant Norm as Layer 0: Normalizer
+    participant Lang as Layer 1: Language Detector
+    participant Parse as Layer 4: spaCy Parser
+    participant Aspect as Layer 5: Aspect Extractor
+    participant Neg as Layer 6: Negation Scoper
+    participant Val as Layer 7: Valence Score
+    participant Con as Layer 8: Contrast Resolver
+    participant Phrase as Layer 9: Phrase Override
+    participant Comp as Layer 10: Competitor Detector
+    participant Ensemble as Layer 20: Ensemble Decision
+
+    Engine ->> Norm: Raw Comment Text
+    activate Norm
+    Note over Norm: Unicode norm, contraction expansion,<br/>emoji map, repeated char fix
+    Norm -->> Engine: Cleaned Lowercase Text
+    deactivate Norm
+
+    Engine ->> Lang: Cleaned Text
+    activate Lang
+    Note over Lang: Hinglish detect & Translates<br/>Hinglish adjectives (acha -> good)
+    Lang -->> Engine: Standardized English Text
+    deactivate Lang
+
+    Engine ->> Parse: Standardized Text
+    activate Parse
+    Note over Parse: spaCy POS Tagging &<br/>Dependency Tree Mapping
+    Parse -->> Engine: spaCy Doc & Tokens List
+    deactivate Parse
+
+    Engine ->> Aspect: spaCy Doc
+    activate Aspect
+    Note over Aspect: Map lemmas to layered ontology<br/>(Taste, Packaging, Price, Availability)
+    Aspect -->> Engine: Aspect Clauses list
+    deactivate Aspect
+
+    Engine ->> Neg: Dependency Tree
+    activate Neg
+    Note over Neg: Scopes negations (not, never, doesn't)<br/>to target head words
+    Neg -->> Engine: List of negated token index flags
+    deactivate Neg
+
+    Engine ->> Val: Aspects + Negated tokens
+    activate Val
+    Note over Val: Sum lexicon scores (+/-) adjusted<br/>by Negators & Intensifiers
+    Val -->> Engine: Scored Aspect clauses
+    deactivate Val
+
+    Engine ->> Con: Scored Aspect clauses
+    activate Con
+    Note over Con: Multiplies weight of clauses<br/>after "but/however" by 1.5x
+    Con -->> Engine: Reweighted Aspect Scores
+    deactivate Con
+
+    Engine ->> Phrase: Cleaned Text
+    activate Phrase
+    Note over Phrase: Checks idiom overrides<br/>(waste of money, top notch)
+    Phrase -->> Engine: Direct Sentiment Override (if matched)
+    deactivate Phrase
+
+    Engine ->> Comp: Cleaned Text
+    activate Comp
+    Note over Comp: Detects competitor mentions &<br/>comparative preference patterns
+    Comp -->> Engine: Brand Preference metadata
+    deactivate Comp
+
+    Engine ->> Ensemble: Scored Aspects + Overrides
+    activate Ensemble
+    Note over Ensemble: Fuses outputs, computes confidence,<br/>sets categories & telemetry details
+    Ensemble -->> Engine: Final Enriched Document State
+    deactivate Ensemble

@@ -1,0 +1,41 @@
+graph TD
+    subgraph Client Layer
+        WebUI[Next.js React Frontend]
+        ExcelUI[Excel Add-In Frontend]
+    end
+
+    subgraph API Gateway & Presentation Layer
+        NextAPI[Next.js API Handler]
+        ExcelAPI[Excel Add-In API Endpoint]
+    end
+
+    subgraph Database Layer (PostgreSQL)
+        Postgres[(PostgreSQL Database)]
+        ResponseTable[Response Table]
+        JobTable[AnalysisJob Queue]
+        ThemeTable[Theme Aggregates]
+        CacheTable[ResponseCache Table]
+        AuditTable[AuditLog Overrides]
+    end
+
+    subgraph Python Backend Services
+        FastAPI[FastAPI Server]
+        WorkerPool[Python Worker Pool]
+        PipelineEngine[NLP Pipeline Engine]
+    end
+
+    WebUI -->|Trigger Bulk Job / View| NextAPI
+    WebUI -->|Live Override / Single Classify| FastAPI
+    ExcelUI -->|Request Cell Analysis| ExcelAPI
+    NextAPI -->|Insert Job PENDING| JobTable
+    ExcelAPI -->|Read/Write Cache| CacheTable
+    ExcelAPI -->|Fallback to Local Engine| PipelineEngine
+    FastAPI -->|Query / Update Response| ResponseTable
+    FastAPI -->|Log Override| AuditTable
+    
+    WorkerPool -->|SKIP LOCKED Poll| JobTable
+    WorkerPool -->|Lease Heartbeat| JobTable
+    WorkerPool -->|Fetch Responses| ResponseTable
+    WorkerPool -->|Run Stages| PipelineEngine
+    WorkerPool -->|Save Enriched Data| ResponseTable
+    WorkerPool -->|Increment Counts| ThemeTable

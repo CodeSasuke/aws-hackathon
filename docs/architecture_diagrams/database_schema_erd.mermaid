@@ -1,0 +1,161 @@
+erDiagram
+    ORGANIZATION ||--o{ USER : contains
+    ORGANIZATION ||--o{ PROJECT : owns
+    USER ||--o{ PROJECT : creates
+    USER ||--o{ AUDIT_LOG : generates
+    PROJECT ||--o{ SURVEY_FILE : processes
+    PROJECT ||--o{ RESPONSE : contains
+    PROJECT ||--o{ THEME : defines
+    PROJECT ||--o{ REPORT : generates
+    PROJECT ||--o{ ANALYSIS_JOB : schedules
+    PROJECT ||--o{ COMPETITOR_SUGGESTION : flags
+    PROJECT ||--o{ AUDIT_LOG : logs
+    THEME ||--o{ RESPONSE : categorizes
+
+    ORGANIZATION {
+        string id PK
+        string name
+        json brandConfig
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    USER {
+        string id PK
+        string email UK
+        string name
+        string passwordHash
+        Role role
+        string organizationId FK
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    PROJECT {
+        string id PK
+        string name
+        string description
+        JobStatus status
+        string organizationId FK
+        string createdById FK
+        json nlpConfig
+        datetime createdAt
+        datetime updatedAt
+    }
+
+    SURVEY_FILE {
+        string id PK
+        string projectId FK
+        string s3Key
+        string filename
+        int fileSize
+        int totalRowCount
+        int spamCount
+        int duplicateCount
+        int oneWordCount
+        int qualityScore
+        json columnMappings
+        datetime createdAt
+    }
+
+    RESPONSE {
+        string id PK
+        string projectId FK
+        int rowIndex
+        json rawData
+        string responseHash
+        Sentiment sentiment
+        string themeId FK
+        string category
+        string intent
+        int urgency
+        string productArea
+        string suggestedAction
+        float confidenceScore
+        boolean isSpam
+        boolean isDuplicate
+        string representativeQuote
+        string clusterId
+        string language
+        datetime processedAt
+        string nlpVersion
+        string ontologyVersion
+        string ruleVersion
+        json nlpMetadata
+        datetime createdAt
+    }
+
+    RESPONSE_CACHE {
+        string hash PK
+        string text
+        Sentiment sentiment
+        string category
+        string themeName
+        string intent
+        int urgency
+        string productArea
+        string suggestedAction
+        datetime createdAt
+    }
+
+    THEME {
+        string id PK
+        string projectId FK
+        string name
+        string category
+        int count
+        datetime createdAt
+    }
+
+    REPORT {
+        string id PK
+        string projectId FK
+        string executiveSummary
+        json keyFindings
+        json recommendations
+        json timelineInsights
+        string pdfS3Key
+        string excelS3Key
+        datetime createdAt
+    }
+
+    AUDIT_LOG {
+        string id PK
+        string userId FK
+        string projectId FK
+        string action
+        json metadata
+        datetime timestamp
+    }
+
+    ANALYSIS_JOB {
+        string id PK
+        string projectId FK
+        JobStatus status
+        int priority
+        int progress
+        int retryCount
+        int maxRetries
+        string workerId
+        string error
+        datetime heartbeatAt
+        datetime leaseExpiresAt
+        int processingTimeMs
+        int tokensProcessed
+        int responsesProcessed
+        float memoryUsageMB
+        datetime createdAt
+        datetime startedAt
+        datetime completedAt
+    }
+
+    COMPETITOR_SUGGESTION {
+        string id PK
+        string projectId FK
+        string brandName
+        int mentions
+        float confidence
+        string status
+        datetime createdAt
+        datetime updatedAt
+    }

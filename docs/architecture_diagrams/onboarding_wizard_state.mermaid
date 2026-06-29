@@ -1,0 +1,40 @@
+stateDiagram-v2
+    [*] --> WelcomeStep : Open Wizard / Create Project
+
+    WelcomeStep --> ProjectStep : Click "Get Started"
+    
+    ProjectStep --> WelcomeStep : Click "Back"
+    ProjectStep --> ProductStep : Click "Continue" (Requires Project Name)
+
+    state ProductStep {
+        [*] --> ProductInfo : Guided Step 1: Info (Name, Category, Desc)
+        ProductInfo --> ProductContext : Click "Continue" (Requires Name & Category)
+        ProductContext --> ProductReview : Click "Continue"
+        ProductReview --> [*] : Click "Ready to Upload"
+    }
+
+    ProductStep --> ProjectStep : Click "Back"
+    ProductStep --> UploadStep : Transition to Upload
+
+    state UploadStep {
+        [*] --> DragDropFile : Select CSV or Excel File
+        DragDropFile --> ColumnMapping : Click "Process Upload & Map Columns" (Uploads to S3)
+        ColumnMapping --> RunPipeline : Click "Analyze Responses"
+    }
+
+    UploadStep --> ProductStep : Click "Back" / Reset File Selection
+    UploadStep --> ExecutedPipeline : Trigger Job (Saves Job in Database Queue)
+    
+    ExecutedPipeline --> PipelinePolling : Poll Job Status (PENDING -> PARSING -> CLUSTERING -> ANALYZING -> GENERATING_REPORTS)
+    
+    state PipelinePolling {
+        [*] --> CheckStatus : Fetch job details from API
+        CheckStatus --> UpdateProgress : Progress bar updates (0-100%)
+        CheckStatus --> PipelineSuccess : JobStatus == COMPLETED
+        CheckStatus --> PipelineFailure : JobStatus == FAILED
+    }
+
+    PipelineSuccess --> DashboardActive : Redirect to Executive Dashboard
+    PipelineFailure --> UploadStep : Show Error Details & Allow Rerun
+    
+    DashboardActive --> [*]

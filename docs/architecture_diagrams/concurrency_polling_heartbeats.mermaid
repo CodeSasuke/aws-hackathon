@@ -1,0 +1,26 @@
+stateDiagram-v2
+    [*] --> PENDING : User uploads CSV
+    
+    state Poll_Queue <<choice>>
+    PENDING --> Poll_Queue : Worker loop checks DB
+    
+    state "SELECT FOR UPDATE SKIP LOCKED" as LockJob
+    Poll_Queue --> LockJob : Found Pending Job
+    Poll_Queue --> [*] : No Jobs (Sleep 2s)
+
+    state Locked_Executing {
+        [*] --> Spawn_Heartbeat : Start Worker Process
+        Spawn_Heartbeat --> Run_Pipeline : Spawns daemon thread to update heartbeat every 10s
+        Run_Pipeline --> Complete_Process : Pipeline processes all rows
+        Run_Pipeline --> Error_Catch : Pipeline throws exception
+    }
+
+    state DLQ_Check <<choice>>
+    Error_Catch --> DLQ_Check : Retry count updated
+
+    Complete_Process --> COMPLETED : Job completed metrics written
+    DLQ_Check --> PENDING : retryCount < maxRetries (lease cleared)
+    DLQ_Check --> DEAD_LETTER : retryCount >= maxRetries
+    
+    COMPLETED --> [*]
+    DEAD_LETTER --> [*]

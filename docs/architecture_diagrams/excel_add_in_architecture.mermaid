@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    participant Excel as Excel Spreadsheet
+    participant AddIn as Excel Add-in Taskpane
+    participant API as Next.js API (/api/excel-add-in/analyze)
+    participant Cache as PostgreSQL (ResponseCache)
+    participant Engine as Local Matching Engine (pipeline.ts)
+
+    Excel ->> AddIn: User selects text column & clicks "Analyze Selection"
+    activate AddIn
+    AddIn ->> Excel: Read selected range values (Office.js API)
+    Excel -->> AddIn: Returns texts array
+    AddIn ->> API: POST { texts: string[] }
+    activate API
+
+    rect rgb(240, 248, 255)
+        Note over API: Preprocessing Loop
+        API ->> API: Compute SHA256 Hash for each row text
+        API ->> Cache: Bulk query hashes to find cached results
+        Cache -->> API: Return matching cache rows
+    end
+
+    alt Cache Hit (All Rows Found)
+        Note over API: 100% Cache Efficiency
+        API -->> AddIn: Returns sentiment & analysis columns
+    else Cache Miss (Unique Pending Rows Exist)
+        API ->> Engine: Run local classification on unique texts
+        activate Engine
+        Note over Engine: Local Leader-Clustering<br/>(Jaccard Character 3-Gram similarity)
+        Engine ->> Engine: Select cluster representatives
+        Engine ->> Engine: Run rule-based taxonomy parser
+        Engine -->> API: Return enriched results
+        deactivate Engine
+        API ->> Cache: Bulk insert/upsert new entries (skipDuplicates)
+        API -->> AddIn: Combine cache & fresh results and return
+    end
+    deactivate API
+
+    AddIn ->> Excel: Write results matrix to adjacent columns (Sentiment, Theme, Category, Action, Urgency)
+    AddIn ->> Excel: Apply visual formatting (color/bold cells)
+    Excel -->> AddIn: Complete updates
+    AddIn -->> Excel: Show "Complete! Sheet updated." status
+    deactivate AddIn
