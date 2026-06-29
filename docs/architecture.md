@@ -16,40 +16,39 @@ This system decouples the Next.js presentation server from the heavy NLP computa
 
 ```mermaid
 graph TD
-    subgraph Client Layer
+    subgraph Client Layer ["Client Layer (Hosted on Vercel / v0.app)"]
         WebUI[Next.js React Frontend]
     end
 
     subgraph API Gateway & Presentation
         NextAPI[Next.js API Handler]
+        JSPipeline[TypeScript NLP Pipeline Engine]
     end
 
-    subgraph Database Layer
-        Postgres[(PostgreSQL Database)]
+    subgraph Database Layer ["Database Layer (Amazon Aurora)"]
+        Postgres[(Amazon Aurora Database)]
         ResponseTable[Response Table]
         JobTable[AnalysisJob Queue]
         ThemeTable[Theme Aggregates]
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph Python Backend Services
-        FastAPI[FastAPI Server]
-        WorkerPool[Python Worker Pool]
-        PipelineEngine[NLP Pipeline Engine]
-    end
-
     WebUI -->|Trigger Bulk Job| NextAPI
-    WebUI -->|Live Override / Single Classify| FastAPI
+    NextAPI -->|Execute Local Run| JSPipeline
     NextAPI -->|Insert Job PENDING| JobTable
-    FastAPI -->|Query / Update Response| ResponseTable
-    FastAPI -->|Log Override| AuditTable
     
-    WorkerPool -->|SKIP LOCKED Poll| JobTable
-    WorkerPool -->|Lease Heartbeat| JobTable
-    WorkerPool -->|Fetch Responses| ResponseTable
-    WorkerPool -->|Run Stages| PipelineEngine
-    WorkerPool -->|Save Enriched Data| ResponseTable
-    WorkerPool -->|Increment Counts| ThemeTable
+    JSPipeline -->|Update Responses| ResponseTable
+    JSPipeline -->|Log Override| AuditTable
+    JSPipeline -->|Update Theme Counts| ThemeTable
+
+    %% Color Coding Styles
+    classDef client fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef api fill:#d97706,stroke:#b45309,stroke-width:2px,color:#fff;
+    classDef db fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff;
+
+    class WebUI client;
+    class NextAPI,JSPipeline api;
+    class Postgres,ResponseTable,JobTable,ThemeTable,AuditTable db;
 ```
 
 ---

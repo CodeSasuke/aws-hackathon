@@ -121,7 +121,7 @@ Here is a visual walkthrough of the SurveyIQ platform, detailing key pages, user
 ### System Design
 ```mermaid
 graph TD
-    subgraph ClientLayer ["Client Layer"]
+    subgraph ClientLayer ["Client Layer (Hosted on Vercel / v0.app)"]
         WebUI[Next.js React Frontend]
         ExcelUI[Excel Add-In Frontend]
     end
@@ -132,8 +132,12 @@ graph TD
         JSPipeline[TypeScript NLP Pipeline Engine]
     end
 
-    subgraph DBLayer ["Database Layer (PostgreSQL)"]
-        Postgres[(PostgreSQL Database)]
+    subgraph StorageLayer ["Cloud Storage Layer (AWS)"]
+        S3Bucket[(Amazon S3 Bucket)]
+    end
+
+    subgraph DBLayer ["Database Layer (Amazon Aurora PostgreSQL)"]
+        Postgres[(Amazon Aurora Database)]
         ResponseTable[Response Table]
         JobTable[AnalysisJob Queue]
         ThemeTable[Theme Aggregates]
@@ -141,14 +145,12 @@ graph TD
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph EnterpriseRoadmap ["Enterprise Roadmap Subsystem (Optional/Future)"]
-        FastAPI[FastAPI Server]
-        WorkerPool[Python Worker Pool]
-        PipelineEngine[15-Stage NLP Engine]
-    end
-
-    %% Active Next.js flow
-    WebUI -->|Trigger Job / View / Override| NextAPI
+    %% Active Next.js & Upload flow
+    WebUI -->|1. Request Presigned URL| NextAPI
+    NextAPI -->|2. Generate Presigned URL| S3Bucket
+    WebUI -->|3. Upload Spreadsheet File| S3Bucket
+    WebUI -->|4. Trigger Job / View / Override| NextAPI
+    NextAPI -->|5. Fetch & Parse File| S3Bucket
     ExcelUI -->|Request Cell Analysis| ExcelAPI
     
     NextAPI -->|Execute Local Run| JSPipeline
@@ -160,11 +162,16 @@ graph TD
     JSPipeline -->|Log Override| AuditTable
     JSPipeline -->|Update Theme Counts| ThemeTable
 
-    %% Future Enterprise flow
-    WorkerPool -.->|Poll PENDING| JobTable
-    WorkerPool -.->|Process & Enrich| PipelineEngine
-    PipelineEngine -.->|Save Data| ResponseTable
-    FastAPI -.->|Future Override Log| AuditTable
+    %% Color Coding Styles
+    classDef client fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef api fill:#d97706,stroke:#b45309,stroke-width:2px,color:#fff;
+    classDef storage fill:#059669,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef db fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff;
+
+    class WebUI,ExcelUI client;
+    class NextAPI,ExcelAPI,JSPipeline api;
+    class S3Bucket storage;
+    class Postgres,ResponseTable,JobTable,ThemeTable,CacheTable,AuditTable db;
 ```
 
 ### Technology Stack

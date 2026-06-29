@@ -1,17 +1,19 @@
 graph TD
-    subgraph ClientLayer ["Client Layer"]
+    subgraph ClientLayer ["Client Layer (Hosted on Vercel / v0.app)"]
         WebUI[Next.js React Frontend]
-        ExcelUI[Excel Add-In Frontend]
     end
 
     subgraph APILayer ["Active API & Local Engine Layer"]
         NextAPI[Next.js API Handler]
-        ExcelAPI[Excel Add-In API Endpoint]
         JSPipeline[TypeScript NLP Pipeline Engine]
     end
 
-    subgraph DBLayer ["Database Layer (PostgreSQL)"]
-        Postgres[(PostgreSQL Database)]
+    subgraph StorageLayer ["Cloud Storage Layer (AWS)"]
+        S3Bucket[(Amazon S3 Bucket)]
+    end
+
+    subgraph DBLayer ["Database Layer (Amazon Aurora PostgreSQL)"]
+        Postgres[(Amazon Aurora Database)]
         ResponseTable[Response Table]
         JobTable[AnalysisJob Queue]
         ThemeTable[Theme Aggregates]
@@ -19,27 +21,27 @@ graph TD
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph EnterpriseRoadmap ["Enterprise Roadmap Subsystem (Optional/Future)"]
-        FastAPI[FastAPI Server]
-        WorkerPool[Python Worker Pool]
-        PipelineEngine[15-Stage NLP Engine]
-    end
-
-    %% Active Next.js flow
-    WebUI -->|Trigger Job / View / Override| NextAPI
-    ExcelUI -->|Request Cell Analysis| ExcelAPI
+    %% Active Next.js & Upload flow
+    WebUI -->|1. Request Presigned URL| NextAPI
+    NextAPI -->|2. Generate Presigned URL| S3Bucket
+    WebUI -->|3. Upload Spreadsheet File| S3Bucket
+    WebUI -->|4. Trigger Job / View / Override| NextAPI
+    NextAPI -->|5. Fetch & Parse File| S3Bucket
     
     NextAPI -->|Execute Local Run| JSPipeline
     NextAPI -->|Insert Job PENDING| JobTable
-    ExcelAPI -->|Read/Write Cache| CacheTable
-    ExcelAPI -->|Fallback to Local Engine| JSPipeline
     
     JSPipeline -->|Update Responses| ResponseTable
     JSPipeline -->|Log Override| AuditTable
     JSPipeline -->|Update Theme Counts| ThemeTable
 
-    %% Future Enterprise flow
-    WorkerPool -.->|Poll PENDING| JobTable
-    WorkerPool -.->|Process & Enrich| PipelineEngine
-    PipelineEngine -.->|Save Data| ResponseTable
-    FastAPI -.->|Future Override Log| AuditTable
+    %% Color Coding Styles
+    classDef client fill:#2563eb,stroke:#1d4ed8,stroke-width:2px,color:#fff;
+    classDef api fill:#d97706,stroke:#b45309,stroke-width:2px,color:#fff;
+    classDef storage fill:#059669,stroke:#047857,stroke-width:2px,color:#fff;
+    classDef db fill:#7c3aed,stroke:#6d28d9,stroke-width:2px,color:#fff;
+
+    class WebUI client;
+    class NextAPI,JSPipeline api;
+    class S3Bucket storage;
+    class Postgres,ResponseTable,JobTable,ThemeTable,CacheTable,AuditTable db;
