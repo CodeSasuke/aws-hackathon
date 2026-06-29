@@ -22,17 +22,17 @@ Designed for both automated processing and precision human review, SurveyIQ comb
 ### System Design
 ```mermaid
 graph TD
-    subgraph Client Layer
+    subgraph ClientLayer ["Client Layer"]
         WebUI[Next.js React Frontend]
         ExcelUI[Excel Add-In Frontend]
     end
 
-    subgraph API Gateway & Presentation Layer
+    subgraph APILayer ["API Gateway & Presentation Layer"]
         NextAPI[Next.js API Handler]
         ExcelAPI[Excel Add-In API Endpoint]
     end
 
-    subgraph Database Layer (PostgreSQL)
+    subgraph DBLayer ["Database Layer (PostgreSQL)"]
         Postgres[(PostgreSQL Database)]
         ResponseTable[Response Table]
         JobTable[AnalysisJob Queue]
@@ -41,7 +41,7 @@ graph TD
         AuditTable[AuditLog Overrides]
     end
 
-    subgraph Python Backend Services
+    subgraph BackendLayer ["Python Backend Services"]
         FastAPI[FastAPI Server]
         WorkerPool[Python Worker Pool]
         PipelineEngine[NLP Pipeline Engine]
